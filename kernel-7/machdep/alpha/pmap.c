@@ -354,9 +354,12 @@ void pmap_flush_range(pmap_t pmap, vm_offset_t sva, vm_offset_t eva)
 /*
  * Map PAL call trampoline page into userspace
  *
- * This maps a fixed page at ALPHA_PAL_CALL_PAGE (0x10000) containing
- * PALcode trampolines that userspace can call. The page is read-only
- * and executable, and is present in all user pmaps.
+ * This maps a fixed page at ALPHA_PAL_CALL_PAGE (0x000003ffffffe000)
+ * containing PALcode trampolines that userspace can call. The page is
+ * read-only and executable, and is present in all user pmaps.
+ *
+ * The page is placed at the very end of user address space (~4TB - 8KB)
+ * to avoid conflicts with user programs, shared libraries, and the heap.
  *
  * This provides transparent PALcode abstraction - userspace always
  * calls the same virtual address, and the trampolines handle the

@@ -61,8 +61,14 @@ struct alpha_boot_info {
  * Fixed virtual address for userspace PAL call page
  * This is a read-only page mapped at a fixed address in every
  * process that contains trampolines to the correct PALcode.
+ *
+ * Placed at the very end of user address space to avoid conflicts
+ * with user programs and dynamic libraries.
+ *
+ * Alpha user address space: 0x0000000000000000 - 0x000003ffffffffff (43 bits)
+ * We place the PAL page at the last page of the 4TB region.
  */
-#define ALPHA_PAL_CALL_PAGE	0x0000000000010000UL	/* 64KB */
+#define ALPHA_PAL_CALL_PAGE	0x000003ffffffe000UL	/* ~4TB - 8KB */
 
 /*
  * PAL call trampoline structure
