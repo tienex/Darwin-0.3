@@ -220,8 +220,17 @@ init_vm(void)
 void
 alpha_init(void)
 {
+	extern void alpha_firmware_init(unsigned long, unsigned long,
+	                                unsigned long, unsigned long);
+
 	/*
-	 * Detect PALcode variant
+	 * Initialize firmware abstraction layer
+	 * This detects SRM vs ARC and sets up boot parameters
+	 */
+	alpha_firmware_init(boot_hwrpb, boot_argc, boot_argv, boot_envp);
+
+	/*
+	 * Detect PALcode variant (may have been done in firmware_init)
 	 */
 	detect_pal_variant();
 

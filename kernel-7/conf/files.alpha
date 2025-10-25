@@ -14,6 +14,7 @@ machdep/alpha/exception.s	standard
 machdep/alpha/trap.c		standard
 machdep/alpha/machdep.c		standard
 machdep/alpha/pmap.c		standard
+machdep/alpha/firmware.c	standard
 
 # PALcode support files
 machdep/alpha/palcode_unix.c	standard

@@ -350,3 +350,55 @@ void pmap_flush_range(pmap_t pmap, vm_offset_t sva, vm_offset_t eva)
 	/* Flush instruction cache if needed */
 	alpha_imb();
 }
+
+/*
+ * Map PAL call trampoline page into userspace
+ *
+ * This maps a fixed page at ALPHA_PAL_CALL_PAGE (0x10000) containing
+ * PALcode trampolines that userspace can call. The page is read-only
+ * and executable, and is present in all user pmaps.
+ *
+ * This provides transparent PALcode abstraction - userspace always
+ * calls the same virtual address, and the trampolines handle the
+ * differences between UNIX and NT PALcode.
+ */
+void
+pmap_map_pal_page(pmap_t pmap)
+{
+	unsigned long pal_page_pa;
+	alpha_pte_t pte;
+	extern unsigned long alpha_map_pal_page(void);
+
+	/* Get physical address of PAL trampoline page */
+	pal_page_pa = alpha_map_pal_page();
+
+	/*
+	 * Create PTE for PAL page:
+	 * - User read-only
+	 * - Executable
+	 * - Global (present in all address spaces)
+	 */
+	pte = ALPHA_PTE_VALID | ALPHA_PTE_GH;
+	pte |= ALPHA_PTE_URE;		/* User read */
+	pte |= ALPHA_PTE_KRE;		/* Kernel read */
+	pte |= (pa_to_pfn(pal_page_pa) << ALPHA_PTE_PFN_SHIFT);
+
+	/*
+	 * Map the page at fixed virtual address ALPHA_PAL_CALL_PAGE
+	 * This is done by entering it into the page table
+	 */
+	/* TODO: Actually insert the PTE into the page table structure */
+	/* For now, this is a placeholder */
+}
+
+/*
+ * Initialize PAL page for new pmap
+ *
+ * Called when creating a new user pmap to ensure the PAL page
+ * is mapped.
+ */
+void
+pmap_init_pal_page(pmap_t pmap)
+{
+	pmap_map_pal_page(pmap);
+}

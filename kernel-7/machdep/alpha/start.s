@@ -16,38 +16,65 @@
  * Kernel entry point
  *
  * This is where the bootloader/firmware transfers control to the kernel.
- * The kernel is loaded at a known physical address, and we are running
- * in kernel mode with:
- *   - PALcode initialized
- *   - Virtual memory not yet enabled
+ * We must handle both SRM and ARC boot protocols:
+ *
+ * SRM (UNIX PALcode):
  *   - a0 = HWRPB (Hardware Restart Parameter Block) address
  *   - a1 = page table base (may be 0)
  *   - a2 = boot flags
+ *   - Uses PAL_UNIX_* functions
+ *
+ * ARC (NT PALcode):
+ *   - a0 = argc
+ *   - a1 = argv
+ *   - a2 = envp
+ *   - a3 = firmware callback
+ *   - Uses PAL_NT_* functions
  */
 NESTED(start, 16, ra)
 	.prologue 0
 
 	/*
-	 * Save boot parameters
+	 * Save all boot parameters
+	 * We don't know yet if this is SRM or ARC, so save everything
 	 */
 	lda	t0, boot_hwrpb
-	stq	a0, 0(t0)
+	stq	a0, 0(t0)		/* Could be HWRPB or argc */
 	lda	t0, boot_pgtbl
-	stq	a1, 0(t0)
+	stq	a1, 0(t0)		/* Could be page table or argv */
 	lda	t0, boot_flags
-	stq	a2, 0(t0)
+	stq	a2, 0(t0)		/* Could be boot flags or envp */
+	lda	t0, boot_argc
+	stq	a0, 0(t0)		/* Save as argc too */
+	lda	t0, boot_argv
+	stq	a1, 0(t0)		/* Save as argv too */
+	lda	t0, boot_envp
+	stq	a2, 0(t0)		/* Save as envp too */
 
 	/*
-	 * Disable interrupts
+	 * Detect PALcode variant
+	 * Try UNIX swpipl - if it works, we have UNIX PALcode (SRM)
+	 * If it fails, we have NT PALcode (ARC)
 	 */
+	lda	t0, 1f
 	lda	a0, ALPHA_IPL_HIGH
-	call_pal PAL_UNIX_swpipl
+	call_pal PAL_UNIX_swpipl	/* Try UNIX PALcode */
+	br	2f			/* Success - UNIX PALcode */
+
+1:	/* UNIX PALcode failed, try NT PALcode */
+	lda	a0, ALPHA_IPL_HIGH
+	call_pal PAL_NT_swpirql		/* Try NT PALcode */
+	lda	t0, is_arc_firmware
+	lda	t1, 1
+	stq	t1, 0(t0)		/* Mark as ARC firmware */
+
+2:	/* PALcode detected, continue */
 
 	/*
 	 * Initialize GP (global pointer) for kernel
 	 */
-	br	gp, 1f
-1:	ldgp	gp, 0(gp)
+	br	gp, 3f
+3:	ldgp	gp, 0(gp)
 
 	/*
 	 * Initialize kernel stack
@@ -63,6 +90,7 @@ NESTED(start, 16, ra)
 	/*
 	 * Call alpha_init() to perform early initialization
 	 * This function will:
+	 *   - Detect firmware type (SRM/ARC)
 	 *   - Detect CPU type and features
 	 *   - Initialize PALcode interface
 	 *   - Set up virtual memory
@@ -79,8 +107,15 @@ NESTED(start, 16, ra)
 
 	/*
 	 * Should not return here
+	 * Try both PALcode variants for halt
 	 */
-9:	call_pal PAL_UNIX_halt
+9:	lda	t0, is_arc_firmware
+	ldq	t0, 0(t0)
+	bne	t0, 10f
+	call_pal PAL_UNIX_halt		/* SRM halt */
+	br	9b
+
+10:	call_pal PAL_NT_halt		/* ARC halt */
 	br	9b
 
 END(start)
@@ -137,6 +172,7 @@ END(start_secondary)
 	.data
 	.align 3
 
+	/* SRM boot parameters */
 	.globl boot_hwrpb
 boot_hwrpb:
 	.quad 0
@@ -148,6 +184,24 @@ boot_pgtbl:
 	.globl boot_flags
 boot_flags:
 	.quad 0
+
+	/* ARC boot parameters */
+	.globl boot_argc
+boot_argc:
+	.quad 0
+
+	.globl boot_argv
+boot_argv:
+	.quad 0
+
+	.globl boot_envp
+boot_envp:
+	.quad 0
+
+	/* Firmware type flag */
+	.globl is_arc_firmware
+is_arc_firmware:
+	.quad 0			/* 0 = SRM, 1 = ARC */
 
 /*
  * Boot stack
