@@ -25,6 +25,7 @@ machdep/riscv/unix_startup.c	standard
 machdep/riscv/riscv_init.c	standard
 machdep/riscv/intr.c		standard
 machdep/riscv/genassym.c		standard
+machdep/riscv/in_cksum.c		standard
 
 machdep/riscv/libc/memcpy.c	standard
 machdep/riscv/libc/memset.c	standard
