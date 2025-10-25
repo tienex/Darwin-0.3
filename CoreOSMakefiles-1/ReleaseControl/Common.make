@@ -45,7 +45,7 @@ include $(CoreOSMakefiles)/Standard/Standard.make
 # Some reasonable defaults for RC variables
 ##
 
-RC_ARCHS   = ppc i386 ia64
+RC_ARCHS   = ppc i386 ia64 ia64be ia64_32
 RC_RELEASE = unknown
 RC_VERSION = unknown
 

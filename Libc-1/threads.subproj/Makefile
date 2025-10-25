@@ -17,7 +17,7 @@ HFILES = cthreads.h cthread_internals.h
 CFILES = cprocs.c cthreads.c cthreads_sync.c mig_support.c sched.c\
          stack.c threads_data.c
 
-SUBPROJECTS = i386.subproj ppc.subproj ia64.subproj
+SUBPROJECTS = i386.subproj ppc.subproj ia64.subproj ia64be.subproj ia64_32.subproj
 
 OTHERSRCS = Makefile.preamble Makefile Makefile.postamble
 

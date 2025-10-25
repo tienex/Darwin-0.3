@@ -7,31 +7,30 @@
 # and Makefile.postamble (both optional), and Makefile will include them.
 #
 
-NAME = sys
+NAME = ia64_32
 
 PROJECTVERSION = 2.8
 PROJECT_TYPE = Component
 
-GLOBAL_RESOURCES = CLIB-LIST MISSING-MANPAGE MISSING_SYSCALLS\
-                   REQUIRED-MACROS SYSCALL-LIST
+OTHERLINKED = lock.s
 
-CFILES = gettimeofday.c sigprocmask.c errno.c
-
-SUBPROJECTS = i386.subproj ppc.subproj ia64.subproj ia64be.subproj ia64_32.subproj
+CFILES = thread.c
 
 OTHERSRCS = Makefile.preamble Makefile Makefile.postamble
 
+OTHERLINKEDOFILES = lock.o
 
 MAKEFILEDIR = $(MAKEFILEPATH)/pb_makefiles
 CODE_GEN_STYLE = DYNAMIC
 MAKEFILE = subproj.make
 NEXTSTEP_INSTALLDIR = /usr/local/lib
+WINDOWS_INSTALLDIR = /usr/local/lib
+PDO_UNIX_INSTALLDIR = /usr/local/lib
 LIBS = 
 DEBUG_LIBS = $(LIBS)
 PROF_LIBS = $(LIBS)
 
 
-HEADER_PATHS = -I../../..
 
 
 NEXTSTEP_OBJCPLUS_COMPILER = /usr/bin/cc

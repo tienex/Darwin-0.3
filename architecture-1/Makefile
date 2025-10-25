@@ -20,8 +20,8 @@ endif
 
 OBJROOT=.
 
-EXPORT_SOURCE= . i386 ppc ia64
-LOCAL_SOURCE=  . i386 ppc ia64
+EXPORT_SOURCE= . i386 ppc ia64 ia64be ia64_32
+LOCAL_SOURCE=  . i386 ppc ia64 ia64be ia64_32
 TAGS_ARCH= ppc
 
 ifneq "" "$(wildcard /usr/ucb/unifdef)"
