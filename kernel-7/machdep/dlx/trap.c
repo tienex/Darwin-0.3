@@ -18,6 +18,10 @@
 
 extern unsigned int dlx_status_register;
 
+/* Device interrupt handlers */
+extern void keyboard_interrupt(void);
+extern int interrupt_dispatch(int irq);
+
 /*
  * Page Fault Handler
  */
@@ -183,13 +187,13 @@ dlx_exception_handler(unsigned int status, vm_offset_t fault_addr)
 		break;
 
 	case TRAP_TIMER:
-		/* Timer interrupt - call scheduler */
+		/* Timer interrupt - call clock handler */
 		hardclock(NULL);
 		break;
 
 	case TRAP_KBD:
-		/* Keyboard interrupt - call console handler */
-		printf("Keyboard interrupt\n");
+		/* Keyboard interrupt - call keyboard handler */
+		keyboard_interrupt();
 		break;
 
 	default:
