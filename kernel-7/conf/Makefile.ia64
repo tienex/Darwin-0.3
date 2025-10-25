@@ -1,0 +1,129 @@
+##
+# Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+#
+# @APPLE_LICENSE_HEADER_START@
+#
+# Portions Copyright (c) 1999 Apple Computer, Inc.  All Rights
+# Reserved.  This file contains Original Code and/or Modifications of
+# Original Code as defined in and that are subject to the Apple Public
+# Source License Version 1.1 (the "License").  You may not use this file
+# except in compliance with the License.  Please obtain a copy of the
+# License at http://www.apple.com/publicsource and read it before using
+# this file.
+#
+# The Original Code and all software distributed under the License are
+# distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+# EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+# INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE OR NON- INFRINGEMENT.  Please see the
+# License for the specific language governing rights and limitations
+# under the License.
+#
+# @APPLE_LICENSE_HEADER_END@
+##
+
+#
+# Mach Operating System
+# Copyright (c) 1986 Carnegie-Mellon University
+# All rights reserved.  The CMU software License Agreement
+# specifies the terms and conditions for use and redistribution.
+#
+######################################################################
+
+######################################################################
+#BEGIN	Machine dependent Makefile fragment for Darwin IA64
+######################################################################
+
+ifneq "" "$(wildcard /bin/mkdirs)"
+  MKDIRS = /bin/mkdirs
+else
+  MKDIRS = /bin/mkdir -p
+endif
+
+#
+#  Compilation components
+#
+CC=	ia64-unknown-linux-gnu-gcc
+LD=	ia64-unknown-linux-gnu-ld
+AS=	ia64-unknown-linux-gnu-as
+AR=	ia64-unknown-linux-gnu-ar
+OBJCOPY=ia64-unknown-linux-gnu-objcopy
+
+KCC=ia64-unknown-linux-gnu-gcc -static -nostdinc -nostdlib -traditional-cpp
+
+MACHINE_INCLUDES=
+MACHINE_CFLAGS= -D__ia64__ -I$(SOURCE_DIR)/bsd/include \
+	-fwritable-strings -fno-common -fpascal-strings \
+	-O2 -fno-strict-aliasing -fno-builtin -pipe \
+	-mfixed-range=f32-f127 -mno-sdata
+MACHINE_SFLAGS= -D__ia64__
+LDFLAGS=-e _start  -Ttext ${RELOC} \
+	--section-start .data=${SYMADDR} \
+	-static
+
+MACHINE=ia64
+
+LIBS_P= -lgcc
+LIBS= -lgcc
+
+PRELDDEPS=assym.h
+
+LDOBJS_PREFIX= $(LIBC_OBJ)
+LDOBJS_SUFFIX= $(LIBDRIVER_SOURCE)/$(LIBDRIVER) $(LIBOBJC_SOURCE)/$(LIBOBJC)
+
+LDDEPS_PREFIX=
+SWAPDEPS_PREFIX=
+
+OBJSDEPS=
+
+FEATURES_EXTRA=
+
+LIBC_SRC=	memchr.c memcmp.c memcpy.c memmove.c memset.c pagesize.c
+LIBC_OBJ=	$(LIBC_SRC:.c=.o)
+
+$(LIBC_OBJ):
+	${KCC} $(COPTS) $(MACHINE_CFLAGS) -c -O3 $(MACHINEDIR)/libc/$*.c
+
+MACHINE_INSTALL=
+
+#
+# Install machine headers.
+#
+MACHINE_COMPATHDRS=
+MACHINE_INSTALLHDRS= ia64_installhdrs
+
+MACHINE_EXPORT=    bsd/ia64 bsd/dev/ia64 kernserv/ia64 mach/ia64
+MACHINE_LCLEXPORT= bsd/ia64 bsd/dev/ia64 mach/ia64 kernserv/ia64 machdep/ia64 \
+			driverkit/ia64
+MACHINE_MIGDIRS=   mach/ia64
+
+ia64_installhdrs: features DSTROOT
+	echo features = $(FEATURES)
+	$(MKDIRS) ${DSTROOT}${LCLDIR}/machdep/ia64
+	install -c -m 444 ${FEATURES}				\
+		${DSTROOT}${LCLDIR}/machdep/ia64
+
+MACHINE_TAG_DIRS=							\
+	bsd/ia64 bsd/dev/ia64 machdep/ia64 bsd/if/ia64 kernserv/ia64 	\
+	mach/ia64
+
+#
+# Local clean rule
+#
+MACHINE_CLEAN=ia64_clean
+
+ia64_clean:
+	rm -rf *.o *.a
+
+cleanup: ALWAYS
+	for i in ${TAGDIRS}; \
+	do \
+		(cd $(SOURCE_DIR)/$$i; rm -f *.CKP *.OLD *~ *.old core); \
+	done
+
+rebuild: clean cleanup features tags all boot
+	@echo Don't forget to do a make install
+
+######################################################################
+#END	Machine dependent Makefile fragment for Darwin IA64
+######################################################################

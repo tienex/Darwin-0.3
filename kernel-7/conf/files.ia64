@@ -1,0 +1,63 @@
+OPTIONS/show_space		optional show_space
+OPTIONS/eventmeter		optional eventmeter
+OPTIONS/gdb			optional gdb
+OPTIONS/iplmeas			optional iplmeas
+OPTIONS/ski_target		optional ski_target
+OPTIONS/ia64_32			optional ia64_32
+OPTIONS/endian_swap		optional endian_swap
+
+bsd/dev/vol.c			optional vol
+
+# Machine-dependent kernel files
+machdep/ia64/kdp_machdep.c	standard
+
+machdep/ia64/miniMonMachdep.c	standard
+
+# Assembly files (existing)
+machdep/ia64/start.s		standard
+machdep/ia64/locore.s		standard		# TODO: CRITICAL - needs implementation
+machdep/ia64/exception.s	standard		# TODO: CRITICAL - needs implementation
+machdep/ia64/setjmp.s		standard		# TODO: HIGH - needs implementation
+machdep/ia64/bcopy.s		standard		# TODO: MEDIUM - needs implementation
+
+# Core kernel initialization
+machdep/ia64/ia64_init.c	standard
+
+# Memory management (CRITICAL for boot)
+machdep/ia64/pmap.c		standard		# TODO: CRITICAL - needs implementation
+machdep/ia64/fault_copy.c	standard		# TODO: HIGH - needs implementation
+
+# Exception and trap handling (CRITICAL for boot)
+machdep/ia64/trap.c		standard		# TODO: CRITICAL - needs implementation
+machdep/ia64/pcb.c		standard		# TODO: CRITICAL - needs implementation
+
+# Interrupt handling (CRITICAL for boot)
+machdep/ia64/interrupt.c	standard		# TODO: CRITICAL - needs implementation
+machdep/ia64/clock.c		standard		# TODO: CRITICAL - needs implementation
+
+# Machine-dependent support
+machdep/ia64/machdep.c		standard		# TODO: HIGH - needs implementation
+machdep/ia64/machdep_call.c	standard
+machdep/ia64/kern_machdep.c	standard		# TODO: HIGH - needs implementation
+machdep/ia64/sys_machdep.c	standard		# TODO: MEDIUM - needs implementation
+machdep/ia64/vm_machdep.c	standard		# TODO: MEDIUM - needs implementation
+machdep/ia64/swapgeneric.m	standard		# TODO: MEDIUM - needs implementation
+
+# Network support
+machdep/ia64/in_cksum.c		standard		# TODO: MEDIUM - needs implementation
+
+# BSD device support
+bsd/dev/ia64/conf.c		standard
+bsd/dev/ia64/cons.c		standard
+bsd/dev/ia64/mem.c		standard
+bsd/dev/ia64/kdasm.s		standard
+
+# SKI simulator support
+machdep/ia64/ski/ski_console.c	optional ski_target
+machdep/ia64/ski/ski_syscalls.c	optional ski_target
+
+# IA64_32 (ILP32) support
+machdep/ia64/ia64_32/ia64_32_support.c	optional ia64_32
+
+# Endian swapping support
+machdep/ia64/endian/endian_swap.c	optional endian_swap

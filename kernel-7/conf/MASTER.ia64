@@ -1,0 +1,111 @@
+##
+# Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+#
+# @APPLE_LICENSE_HEADER_START@
+#
+# Portions Copyright (c) 1999 Apple Computer, Inc.  All Rights
+# Reserved.  This file contains Original Code and/or Modifications of
+# Original Code as defined in and that are subject to the Apple Public
+# Source License Version 1.1 (the "License").  You may not use this file
+# except in compliance with the License.  Please obtain a copy of the
+# License at http://www.apple.com/publicsource and read it before using
+# this file.
+#
+# The Original Code and all software distributed under the License are
+# distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+# EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+# INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE OR NON- INFRINGEMENT.  Please see the
+# License for the specific language governing rights and limitations
+# under the License.
+#
+# @APPLE_LICENSE_HEADER_END@
+##
+
+#
+# Mach Operating System
+# Copyright (c) 1986 Carnegie-Mellon University
+# All rights reserved.  The CMU software License Agreement
+# specifies the terms and conditions for use and redistribution.
+#
+######################################################################
+#
+#  Master Darwin IA64 configuration file
+#
+######################################################################
+#
+#  IA64 (PSEUDO-)DEVICES (select any combination)
+#	rd   = RAM disk
+#	sd   = SCSI disk
+#	sg   = Generic SCSI Device
+#	st   = SCSI tape
+#	fd   = Floppy Disk
+#	en   = Integrated Ethernet controller
+#	vol   = removable volume support device
+#	venip = virtual Ethernet/IP network interface
+#	zs    = Serial device
+#
+#  MULTIPROCESSOR SUPPORT (select exactly one)
+#	multi = support 4 processors
+#	uni   = supports single processor
+#
+#  SPECIAL CHARACTERISTICS (select any combination)
+#	gdb        = GNU kernel debugger
+#	posix_kern = POSIX support
+#	ski_target = SKI simulator target
+#	ia64_32    = IA64_32 (ILP32) support
+#	endian_swap= Runtime endian swapping support
+#
+#  CPU TYPE (select exactly one)
+#	ia64   = Intel Itanium (IA64)
+#
+######################################################################
+#
+#  Standard Darwin IA64 Research Configurations:
+#  -------- ------ ---- -------- ---------------
+#
+#  RELEASE = [ia64 mach medium event vol pst gdb kernobjc libdriver fixpri simple_clock mdebug kernserv driverkit uxpr kernstack ipc_compat ipc_debug nfsclient nfsserver quota fifo fdesc union portal ffs cd9660 compat_43 revfs nbc]
+#  PROFILE = [RELEASE profile]
+#  DEBUG = [ia64 mach medium event vol pst gdb kernobjc libdriver_g fixpri debug simple_clock mdebug kernserv driverkit xpr_debug uxpr kernstack ipc_compat ipc_debug nfsclient nfsserver quota fifo fdesc union portal ffs cd9660 compat_43 diagnostic revfs nbc]
+#
+######################################################################
+#
+machine		"ia64"						# <ia64>
+cpu		"ia64"						# <ia64>
+
+makeoptions	CCONFIGFLAGS = "-g -O2 -fno-omit-frame-pointer"	# <gdb>
+makeoptions	CCONFIGFLAGS = "-O2"				# <!gdb>
+makeoptions	RELOC = "A000000000000000"			# <ia64>
+makeoptions	SYMADDR = "A000000001000000"			# <ia64>
+
+options		GDB		# GNU kernel debugger		# <gdb>
+options		DEBUG		# general debugging code	# <debug>
+options		SHOW_SPACE	# print size of structures	# <debug>
+options		EVENTMETER	# event meter support		# <debug>
+options		SKI_TARGET	# SKI simulator support		# <ski_target>
+options		IA64_32		# IA64_32 (ILP32) support	# <ia64_32>
+options		ENDIAN_SWAP	# Runtime endian swapping	# <endian_swap>
+options		UXPR		# user-level XPR package	# <uxpr>
+config		mach_kernel	swap generic			# <mach>
+
+options		EVENT						# <event>
+
+#
+#  Ipl measurement system
+#
+pseudo-device	iplmeas						# <iplmeas>
+
+#
+#  NFS measurement system
+#
+pseudo-device	nfsmeas						# <nfsmeas>
+
+#
+#  Removable Volume support
+#
+pseudo-device	vol						# <vol>
+
+#
+#  Point-to-Point Protocol support
+#
+pseudo-device ppp 2						# <ppp>
