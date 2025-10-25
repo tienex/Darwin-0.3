@@ -41,6 +41,7 @@ static const struct arch_flag arch_flags[] = {
     { "little",	CPU_TYPE_ANY,	  CPU_SUBTYPE_LITTLE_ENDIAN },
     { "big",	CPU_TYPE_ANY,	  CPU_SUBTYPE_BIG_ENDIAN },
     /* architecture families */
+    { "vax",    CPU_TYPE_VAX,     CPU_SUBTYPE_VAX_ALL },
     { "ppc",    CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_ALL },
     { "i386",   CPU_TYPE_I386,    CPU_SUBTYPE_I386_ALL },
     { "m68k",   CPU_TYPE_MC680x0, CPU_SUBTYPE_MC680x0_ALL },
@@ -132,6 +133,18 @@ struct arch_flag *specific_arch_flag)
 	    specific_arch_flag->cpusubtype = host_basic_info.cpu_subtype;
 	}
 	switch(host_basic_info.cpu_type){
+	case CPU_TYPE_VAX:
+	    switch(host_basic_info.cpu_subtype){
+	    case CPU_SUBTYPE_VAX_ALL:
+		if(family_arch_flag != NULL){
+		    family_arch_flag->name = "vax";
+		    family_arch_flag->cpusubtype = CPU_SUBTYPE_VAX_ALL;
+		}
+		if(specific_arch_flag != NULL)
+		    specific_arch_flag->name = "vax";
+		return(1);
+	    }
+	    break;
 	case CPU_TYPE_MC680x0:
 	    switch(host_basic_info.cpu_subtype){
 	    case CPU_SUBTYPE_MC680x0_ALL:
@@ -456,7 +469,8 @@ const struct arch_flag *flag)
       flag->cputype == CPU_TYPE_SPARC ||
       flag->cputype == CPU_TYPE_I860)
         return BIG_ENDIAN_BYTE_SEX;
-    else if(flag->cputype == CPU_TYPE_I386)
+    else if(flag->cputype == CPU_TYPE_I386 ||
+            flag->cputype == CPU_TYPE_VAX)
         return LITTLE_ENDIAN_BYTE_SEX;
     else
         return UNKNOWN_BYTE_SEX;
@@ -476,6 +490,7 @@ const struct arch_flag *flag)
       flag->cputype == CPU_TYPE_MC88000 ||
       flag->cputype == CPU_TYPE_POWERPC ||
       flag->cputype == CPU_TYPE_I386 ||
+      flag->cputype == CPU_TYPE_VAX ||
       flag->cputype == CPU_TYPE_SPARC ||
       flag->cputype == CPU_TYPE_I860)
         return(-1);
@@ -498,6 +513,8 @@ get_stack_addr_from_flag(
 const struct arch_flag *flag)
 {
     switch(flag->cputype){
+    case CPU_TYPE_VAX:
+	return(0x80000000);
     case CPU_TYPE_MC680x0:
 	return(0x04000000);
     case CPU_TYPE_MC88000:

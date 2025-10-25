@@ -54,6 +54,8 @@
  */
 static const NXArchInfo ArchInfoTable[] = {
     /* architecture families */
+    {"vax",    CPU_TYPE_VAX,     CPU_SUBTYPE_VAX_ALL,      NX_LittleEndian,
+	 "VAX"},
     {"hppa",   CPU_TYPE_HPPA,	 CPU_SUBTYPE_HPPA_ALL,	   NX_BigEndian,
 	 "HP-PA"},
     {"i386",   CPU_TYPE_I386,    CPU_SUBTYPE_I386_ALL,	   NX_LittleEndian,
@@ -462,6 +464,14 @@ unsigned long nfat_archs)
 		    return(fat_archs + i);
 	    }
 	    break;
+	case CPU_TYPE_VAX:
+	    for(i = 0; i < nfat_archs; i++){
+		if(fat_archs[i].cputype != cputype)
+		    continue;
+		if(fat_archs[i].cpusubtype == CPU_SUBTYPE_VAX_ALL)
+		    return(fat_archs + i);
+	    }
+	    break;
 	default:
 	    return(NULL);
 	}
@@ -625,6 +635,13 @@ cpu_subtype_t cpusubtype2)
 			return((cpu_subtype_t)-1);
 	    if(cpusubtype2 != CPU_SUBTYPE_SPARC_ALL)
 			return((cpu_subtype_t)-1);
+	    break; /* logically can't get here */
+
+	case CPU_TYPE_VAX:
+	    if(cpusubtype1 != CPU_SUBTYPE_VAX_ALL)
+		return((cpu_subtype_t)-1);
+	    if(cpusubtype2 != CPU_SUBTYPE_VAX_ALL)
+		return((cpu_subtype_t)-1);
 	    break; /* logically can't get here */
 
 	default:
