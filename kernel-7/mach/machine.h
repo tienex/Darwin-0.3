@@ -111,7 +111,7 @@ extern vm_offset_t		interrupt_stack[];
 /*
  *	Machine types known by all.
  */
- 
+
 #define CPU_TYPE_ANY		((cpu_type_t) -1)
 
 #define CPU_TYPE_VAX		((cpu_type_t) 1)
@@ -132,6 +132,16 @@ extern vm_offset_t		interrupt_stack[];
 /* skip	CPU_TYPE_ALPHA		((cpu_type_t) 16)	*/
 /* skip				((cpu_type_t) 17)	*/
 #define CPU_TYPE_POWERPC		((cpu_type_t) 18)
+
+/*
+ *	64-bit ABI flag
+ */
+#define CPU_ARCH_ABI64		((cpu_type_t) 0x01000000)
+
+/*
+ *	64-bit architectures
+ */
+#define CPU_TYPE_X86_64		((cpu_type_t) (CPU_TYPE_I386 | CPU_ARCH_ABI64))
 
 
 /*
@@ -216,6 +226,12 @@ extern vm_offset_t		interrupt_stack[];
 
 #define CPU_SUBTYPE_INTEL_MODEL(x)	((x) >> 4)
 #define CPU_SUBTYPE_INTEL_MODEL_ALL	0
+
+/*
+ *	X86_64 subtypes.
+ */
+#define CPU_SUBTYPE_X86_64_ALL	((cpu_subtype_t) 3)
+#define CPU_SUBTYPE_X86_64_H	((cpu_subtype_t) 8)	/* Haswell and compatible */
 
 /*
  *	Mips subtypes.

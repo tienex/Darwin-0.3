@@ -1,0 +1,17 @@
+x86-64 Machine-Dependent Code
+==============================
+
+This directory is designated for x86-64 (AMD64) architecture-specific
+machine-dependent code.
+
+Full implementation would require:
+- Low-level startup code (start.s, locore.s)
+- Page mapping and memory management (pmap.c)
+- Trap and interrupt handling (trap.c, intr.c)
+- Context switching (cswtch.s, pcb.c)
+- System call interface
+- FPU/SSE support
+- APIC/interrupt controller support
+- And other x86-64 specific implementations
+
+This is currently a placeholder directory for build system integration.

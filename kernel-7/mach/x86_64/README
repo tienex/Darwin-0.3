@@ -1,0 +1,6 @@
+x86-64 Mach Layer Headers
+=========================
+
+This directory contains x86-64 architecture-specific Mach headers.
+
+Placeholder for x86-64 support.

@@ -1,0 +1,13 @@
+OPTIONS/show_space		optional show_space
+OPTIONS/eventmeter		optional eventmeter
+OPTIONS/gdb			optional gdb
+OPTIONS/iplmeas			optional iplmeas
+
+bsd/dev/vol.c			optional vol
+
+# x86_64 machine-dependent files
+# These are placeholder entries for x86-64 support
+# Full implementation would require creating these files
+
+# Note: x86_64 support is currently a stub for build system integration
+# Many of these files would need to be created for full x86-64 functionality
