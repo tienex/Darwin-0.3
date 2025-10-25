@@ -3854,7 +3854,745 @@ Func:
 - Machine learning (quantum neural networks)
 - Optimization problems
 
-## 18. Instruction Encoding Summary
+## 18. Extended Numeric Formats (Decimal FP, BCD, bfloat16, FP8)
+
+### Overview
+
+DLX provides comprehensive support for alternative numeric formats beyond IEEE 754 binary floating-point, including decimal floating-point (IEEE 754-2008), Binary Coded Decimal (BCD), bfloat16 (ML/AI), and FP8 (deep learning). All formats integrate with the vector unit.
+
+### IEEE 754-2008 Decimal Floating-Point
+
+#### Decimal Format Specifications
+
+```c
+/* IEEE 754-2008 decimal floating-point formats */
+
+/* Decimal32 (32-bit) */
+typedef struct {
+    uint32_t bits;      /* Encoded using DPD or BID */
+    /* 7 decimal digits precision */
+    /* Exponent range: -95 to +96 */
+} decimal32_t;
+
+/* Decimal64 (64-bit) */
+typedef struct {
+    uint64_t bits;      /* Encoded using DPD or BID */
+    /* 16 decimal digits precision */
+    /* Exponent range: -383 to +384 */
+} decimal64_t;
+
+/* Decimal128 (128-bit) */
+typedef struct {
+    uint64_t high;
+    uint64_t low;
+    /* 34 decimal digits precision */
+    /* Exponent range: -6143 to +6144 */
+} decimal128_t;
+
+/* Example values in decimal64:
+ * 1.234567890123456 × 10^0  = exact representation
+ * 0.1                        = exact (unlike binary FP!)
+ * 1.0 / 3.0                  = 0.3333333333333333...
+ */
+```
+
+#### Encoding Schemes
+
+```c
+/*
+ * Two encoding schemes for decimal FP:
+ *
+ * 1. DPD (Densely Packed Decimal):
+ *    - Groups of 3 decimal digits packed into 10 bits
+ *    - Hardware-friendly decoding
+ *    - Used by IBM POWER processors
+ *
+ * 2. BID (Binary Integer Decimal):
+ *    - Coefficient stored as binary integer
+ *    - Simpler arithmetic operations
+ *    - Used by Intel x86 processors
+ *
+ * DLX supports both, selectable via control register
+ */
+
+/* Decimal32 format (DPD encoding) */
+┌─┬─────────┬──────────────────────────────┐
+│S│Combination│     Trailing significand   │
+│1│   5      │           20                │
+└─┴─────────┴──────────────────────────────┘
+
+/* Decimal64 format (DPD encoding) */
+┌─┬─────────┬──────────────────────────────────────────────────────┐
+│S│Combination│              Trailing significand                  │
+│1│    5     │                    50                               │
+└─┴─────────┴──────────────────────────────────────────────────────┘
+
+/* Decimal128 format (DPD encoding) */
+┌─┬─────────┬────────────────────────────────────────────────────────────────────────────┐
+│S│Combination│                    Trailing significand                                  │
+│1│    5     │                            110                                            │
+└─┴─────────┴────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Decimal FP Control Register
+
+```c
+/* Decimal FP configuration */
+typedef struct {
+    uint32_t enable:1;          /* Bit 0: Enable decimal FP */
+    uint32_t encoding:1;        /* Bit 1: 0=DPD, 1=BID */
+    uint32_t rounding:3;        /* Bits 2-4: Rounding mode */
+    uint32_t exception_mask:5;  /* Bits 5-9: Exception masks */
+    uint32_t reserved:22;
+} decimal_fp_config_t;
+
+#define SR_DFP_CONFIG   0x80
+
+/* Rounding modes (IEEE 754-2008) */
+#define DFP_ROUND_HALF_EVEN         0  /* Round to nearest, ties to even */
+#define DFP_ROUND_HALF_UP           1  /* Round to nearest, ties away from 0 */
+#define DFP_ROUND_HALF_DOWN         2  /* Round to nearest, ties toward 0 */
+#define DFP_ROUND_UP                3  /* Round toward +∞ */
+#define DFP_ROUND_DOWN              4  /* Round toward -∞ */
+#define DFP_ROUND_TOWARD_ZERO       5  /* Round toward 0 */
+#define DFP_ROUND_HALF_AWAY_ZERO    6  /* Round to nearest, ties away from 0 */
+```
+
+#### Decimal FP Instructions
+
+```assembly
+# Decimal32 operations (32-bit, 7 digits)
+DADD.32   fd, fs, ft        # fd = fs + ft (decimal32)
+DSUB.32   fd, fs, ft        # fd = fs - ft
+DMUL.32   fd, fs, ft        # fd = fs * ft
+DDIV.32   fd, fs, ft        # fd = fs / ft
+DSQRT.32  fd, fs            # fd = √fs
+DFMA.32   fd, fs, ft, fa    # fd = fs * ft + fa
+
+# Decimal64 operations (64-bit, 16 digits)
+DADD.64   fd, fs, ft        # fd = fs + ft (decimal64)
+DSUB.64   fd, fs, ft        # fd = fs - ft
+DMUL.64   fd, fs, ft        # fd = fs * ft
+DDIV.64   fd, fs, ft        # fd = fs / ft
+DSQRT.64  fd, fs            # fd = √fs
+DFMA.64   fd, fs, ft, fa    # fd = fs * ft + fa
+
+# Decimal128 operations (128-bit, 34 digits)
+DADD.128  fd, fs, ft        # fd = fs + ft (decimal128)
+DSUB.128  fd, fs, ft        # fd = fs - ft
+DMUL.128  fd, fs, ft        # fd = fs * ft
+DDIV.128  fd, fs, ft        # fd = fs / ft
+DSQRT.128 fd, fs            # fd = √fs
+DFMA.128  fd, fs, ft, fa    # fd = fs * ft + fa
+
+# Comparison
+DCMP.32   fd, fs, ft        # Compare decimal32
+DCMP.64   fd, fs, ft        # Compare decimal64
+DCMP.128  fd, fs, ft        # Compare decimal128
+
+# Conversion between decimal formats
+DCVT.32.64   fd, fs         # Convert decimal64 → decimal32
+DCVT.64.32   fd, fs         # Convert decimal32 → decimal64
+DCVT.128.64  fd, fs         # Convert decimal64 → decimal128
+
+# Conversion to/from binary FP
+DCVT.D.F     fd, fs         # Binary float → decimal64
+DCVT.F.D     fd, fs         # Decimal64 → binary float
+DCVT.Q.D     fd, fs         # Decimal64 → binary double
+
+# Conversion to/from integer
+DCVT.W.D     rd, fs         # Decimal64 → int32
+DCVT.D.W     fd, rs         # Int32 → decimal64
+DCVT.L.D     rd, fs         # Decimal64 → int64
+DCVT.D.L     fd, rs         # Int64 → decimal64
+
+# Load/Store decimal FP
+LDD.32    fd, offset(rs)    # Load decimal32
+LDD.64    fd, offset(rs)    # Load decimal64
+LDD.128   fd, offset(rs)    # Load decimal128
+STD.32    fs, offset(rd)    # Store decimal32
+STD.64    fs, offset(rd)    # Store decimal64
+STD.128   fs, offset(rd)    # Store decimal128
+
+# Examples
+    # Financial calculation: 0.1 + 0.2 = 0.3 (exact!)
+    LDD.64  f1, const_0_1   # f1 = 0.1 (exact in decimal)
+    LDD.64  f2, const_0_2   # f2 = 0.2 (exact)
+    DADD.64 f3, f1, f2      # f3 = 0.3 (exact!)
+
+    # Compare with binary FP (would have rounding error)
+    LWC1    f4, const_0_1_binary  # f4 = 0.1000000014...
+    LWC1    f5, const_0_2_binary  # f5 = 0.2000000029...
+    ADD.D   f6, f4, f5            # f6 = 0.3000000043... (error!)
+```
+
+### Binary Coded Decimal (BCD)
+
+#### BCD Formats
+
+```c
+/* Packed BCD: 2 digits per byte */
+typedef struct {
+    uint8_t digit1:4;   /* High nibble: first digit (0-9) */
+    uint8_t digit0:4;   /* Low nibble: second digit (0-9) */
+} packed_bcd_t;
+
+/* Unpacked BCD: 1 digit per byte */
+typedef struct {
+    uint8_t digit:4;    /* Low nibble: digit (0-9) */
+    uint8_t unused:4;   /* High nibble: unused (usually 0) */
+} unpacked_bcd_t;
+
+/* BCD string (variable length) */
+typedef struct {
+    uint8_t length;         /* Number of digits */
+    uint8_t sign:1;         /* 0=positive, 1=negative */
+    uint8_t decimal_pos:7;  /* Position of decimal point */
+    uint8_t digits[];       /* Packed BCD digits */
+} bcd_string_t;
+
+/* Example: 12345 in packed BCD */
+/* bytes: 0x01 0x23 0x45 */
+/*         ^     ^     ^
+ *        1    23    45
+ */
+```
+
+#### BCD Instructions
+
+```assembly
+# BCD arithmetic (packed format)
+BCDADD  rd, rs, rt          # BCD addition
+BCDSUB  rd, rs, rt          # BCD subtraction
+BCDMUL  rd, rs, rt          # BCD multiplication
+BCDDIV  rd, rs, rt          # BCD division
+
+# BCD arithmetic with carry/borrow
+BCDADDC rd, rs, rt          # BCD add with carry
+BCDSUBB rd, rs, rt          # BCD subtract with borrow
+
+# BCD comparison
+BCDCMP  rs, rt              # Compare BCD values
+
+# BCD conversion
+BCD2BIN rd, rs              # Packed BCD → binary
+BIN2BCD rd, rs              # Binary → packed BCD
+BCDPACK rd, rs              # Unpacked → packed BCD
+BCDUNPACK rd, rs            # Packed → unpacked BCD
+
+# BCD string operations
+BCDLEN  rd, (rs)            # Get BCD string length
+BCDNEG  rd, rs              # Negate BCD value
+BCDABS  rd, rs              # Absolute value
+
+# Examples
+    # Add two BCD numbers: 1234 + 5678
+    LI      r10, 0x1234     # r10 = 1234 in packed BCD
+    LI      r11, 0x5678     # r11 = 5678 in packed BCD
+    BCDADD  r12, r10, r11   # r12 = 0x6912 (6912 in BCD)
+
+    # Convert binary to BCD for display
+    LI      r13, 12345      # r13 = 12345 (binary)
+    BIN2BCD r14, r13        # r14 = 0x12345 (packed BCD)
+
+    # Multi-precision BCD addition (128-bit example)
+    # Add 16-digit BCD numbers
+    LW      r10, bcd1_low
+    LW      r11, bcd1_high
+    LW      r12, bcd2_low
+    LW      r13, bcd2_high
+
+    BCDADD  r14, r10, r12   # Add low parts
+    BCDADDC r15, r11, r13   # Add high parts with carry
+```
+
+#### BCD Decimal Adjust
+
+```assembly
+# Decimal adjust after binary arithmetic
+DAA     rd, rs              # Decimal adjust after addition
+DAS     rd, rs              # Decimal adjust after subtraction
+
+# Example: x86-style BCD arithmetic
+    LI      r10, 0x19       # 19 in BCD
+    LI      r11, 0x28       # 28 in BCD
+    ADD     r12, r10, r11   # r12 = 0x41 (binary addition)
+    DAA     r12, r12        # r12 = 0x47 (adjusted to BCD)
+```
+
+### bfloat16 (Brain Floating Point)
+
+#### bfloat16 Format
+
+```c
+/* bfloat16: Truncated IEEE 754 single precision */
+typedef struct {
+    uint16_t sign:1;        /* Sign bit */
+    uint16_t exponent:8;    /* Exponent (same as float32) */
+    uint16_t mantissa:7;    /* Mantissa (truncated from 23 to 7 bits) */
+} bfloat16_t;
+
+/*
+ * bfloat16 vs other 16-bit formats:
+ *
+ * Format      Sign  Exp  Mantissa  Range           Precision
+ * ────────────────────────────────────────────────────────────
+ * bfloat16     1    8      7       ~10^-38..10^38  ~3 decimal digits
+ * IEEE fp16    1    5     10       ~10^-8..65504   ~3 decimal digits
+ * TensorFloat  1    8     10       ~10^-38..10^38  ~3 decimal digits
+ *
+ * bfloat16 advantages:
+ * - Same exponent range as float32 (no overflow in ML training)
+ * - Simple conversion: truncate float32 mantissa
+ * - Hardware-friendly for ML accelerators
+ */
+
+/* Conversion examples */
+float32:   0x3F800000  (1.0)
+bfloat16:  0x3F80      (1.0 - just drop low 16 bits!)
+
+float32:   0x40490FDB  (π)
+bfloat16:  0x4049      (~3.140625)
+```
+
+#### bfloat16 Instructions
+
+```assembly
+# bfloat16 arithmetic
+BADD.H    fd, fs, ft        # bfloat16 addition
+BSUB.H    fd, fs, ft        # bfloat16 subtraction
+BMUL.H    fd, fs, ft        # bfloat16 multiplication
+BDIV.H    fd, fs, ft        # bfloat16 division
+BSQRT.H   fd, fs            # bfloat16 square root
+BFMA.H    fd, fs, ft, fa    # bfloat16 FMA
+
+# Comparison
+BCMP.H    fs, ft            # Compare bfloat16
+
+# Conversion
+BCVT.H.S  fd, fs            # float32 → bfloat16
+BCVT.S.H  fd, fs            # bfloat16 → float32
+BCVT.H.D  fd, fs            # float64 → bfloat16
+BCVT.D.H  fd, fs            # bfloat16 → float64
+BCVT.H.W  fd, rs            # int32 → bfloat16
+BCVT.W.H  rd, fs            # bfloat16 → int32
+
+# Load/Store
+LH.BF16   fd, offset(rs)    # Load bfloat16
+SH.BF16   fs, offset(rd)    # Store bfloat16
+
+# Vector operations (8 bfloat16 in 128-bit vector)
+VBADD.H   vd, vs, vt        # Vector bfloat16 add (8 elements)
+VBMUL.H   vd, vs, vt        # Vector bfloat16 multiply
+VBFMA.H   vd, vs, vt, va    # Vector bfloat16 FMA
+
+# Examples
+    # ML forward pass with bfloat16
+    LH.BF16  f1, weights(r10)
+    LH.BF16  f2, inputs(r11)
+    BMUL.H   f3, f1, f2      # w * x
+    BADD.H   f4, f3, f0      # + bias
+
+    # Convert float32 activations to bfloat16 for next layer
+    BCVT.H.S f5, f4          # Truncate to bfloat16
+    SH.BF16  f5, outputs(r12)
+```
+
+### FP8 (8-bit Floating Point)
+
+#### FP8 Formats
+
+```c
+/* FP8 E4M3 (4-bit exponent, 3-bit mantissa) */
+typedef struct {
+    uint8_t sign:1;         /* Sign bit */
+    uint8_t exponent:4;     /* Exponent (bias 7) */
+    uint8_t mantissa:3;     /* Mantissa */
+} fp8_e4m3_t;
+
+/* FP8 E5M2 (5-bit exponent, 2-bit mantissa) */
+typedef struct {
+    uint8_t sign:1;         /* Sign bit */
+    uint8_t exponent:5;     /* Exponent (bias 15) */
+    uint8_t mantissa:2;     /* Mantissa */
+} fp8_e5m2_t;
+
+/*
+ * FP8 format comparison:
+ *
+ * Format    Sign  Exp  Mant  Bias  Range           Use Case
+ * ──────────────────────────────────────────────────────────
+ * E4M3       1    4    3     7     -448..448       Forward pass
+ * E5M2       1    5    2    15     -57344..57344   Backward pass (gradients)
+ *
+ * E4M3: Better precision, smaller range (weights, activations)
+ * E5M2: Worse precision, larger range (gradients)
+ */
+
+/* Example values in E4M3 */
+0x00: 0.0
+0x38: 1.0
+0x3C: 1.5
+0x3F: 1.75
+0x78: 448 (max normal)
+0xFF: -448
+
+/* Example values in E5M2 */
+0x00: 0.0
+0x3C: 1.0
+0x3E: 1.5
+0x3F: 1.75
+0x7B: 57344 (max normal)
+```
+
+#### FP8 Instructions
+
+```assembly
+# FP8 E4M3 arithmetic
+F8ADD.E4M3   fd, fs, ft     # FP8 E4M3 addition
+F8SUB.E4M3   fd, fs, ft     # FP8 E4M3 subtraction
+F8MUL.E4M3   fd, fs, ft     # FP8 E4M3 multiplication
+
+# FP8 E5M2 arithmetic
+F8ADD.E5M2   fd, fs, ft     # FP8 E5M2 addition
+F8SUB.E5M2   fd, fs, ft     # FP8 E5M2 subtraction
+F8MUL.E5M2   fd, fs, ft     # FP8 E5M2 multiplication
+
+# Comparison
+F8CMP.E4M3   fs, ft         # Compare FP8 E4M3
+F8CMP.E5M2   fs, ft         # Compare FP8 E5M2
+
+# Conversion to/from other formats
+F8CVT.E4M3.S fd, fs         # float32 → FP8 E4M3
+F8CVT.S.E4M3 fd, fs         # FP8 E4M3 → float32
+F8CVT.E5M2.S fd, fs         # float32 → FP8 E5M2
+F8CVT.S.E5M2 fd, fs         # FP8 E5M2 → float32
+F8CVT.E4M3.H fd, fs         # bfloat16 → FP8 E4M3
+F8CVT.H.E4M3 fd, fs         # FP8 E4M3 → bfloat16
+
+# Load/Store
+LB.FP8    fd, offset(rs)    # Load FP8 (8 bits)
+SB.FP8    fs, offset(rd)    # Store FP8
+
+# Vector operations (16 FP8 in 128-bit vector)
+VF8ADD.E4M3 vd, vs, vt      # Vector FP8 E4M3 add (16 elements)
+VF8MUL.E4M3 vd, vs, vt      # Vector FP8 E4M3 multiply
+
+# Mixed precision matrix multiply (common pattern)
+# A(FP8) × B(FP8) → C(float32)
+VDOT.FP8.S  fd, vs, vt      # Dot product: FP8 inputs, float32 output
+
+# Examples
+    # Deep learning inference with FP8
+    LB.FP8   f1, weights(r10)     # Load FP8 weight
+    LB.FP8   f2, activations(r11) # Load FP8 activation
+    F8MUL.E4M3 f3, f1, f2         # Multiply in FP8
+    F8CVT.S.E4M3 f4, f3           # Convert to float32 for accumulation
+    ADD.S    f5, f5, f4           # Accumulate in higher precision
+```
+
+### Vector Operations with All Formats
+
+#### Vector Format Configuration
+
+```c
+/* Vector unit supports all numeric formats */
+typedef enum {
+    VEC_FORMAT_FP32,        /* IEEE 754 single precision */
+    VEC_FORMAT_FP64,        /* IEEE 754 double precision */
+    VEC_FORMAT_FP16,        /* IEEE 754 half precision */
+    VEC_FORMAT_BFLOAT16,    /* bfloat16 */
+    VEC_FORMAT_FP8_E4M3,    /* FP8 E4M3 */
+    VEC_FORMAT_FP8_E5M2,    /* FP8 E5M2 */
+    VEC_FORMAT_DECIMAL32,   /* IEEE 754-2008 decimal32 */
+    VEC_FORMAT_DECIMAL64,   /* IEEE 754-2008 decimal64 */
+    VEC_FORMAT_DECIMAL128,  /* IEEE 754-2008 decimal128 */
+    VEC_FORMAT_BCD_PACKED,  /* Packed BCD */
+    VEC_FORMAT_VAX_F,       /* VAX F_floating */
+    VEC_FORMAT_VAX_D,       /* VAX D_floating */
+    VEC_FORMAT_VAX_G,       /* VAX G_floating */
+    VEC_FORMAT_VAX_H,       /* VAX H_floating */
+} vector_format_t;
+
+/* Vector configuration register */
+#define SR_VEC_FORMAT   0x85
+
+/* Set vector format */
+VSETFMT format              # Set active vector format
+
+/* Examples */
+    VSETFMT VEC_FORMAT_BFLOAT16     # Switch to bfloat16
+    VADD    v0, v1, v2              # Add 8×bfloat16
+
+    VSETFMT VEC_FORMAT_FP8_E4M3     # Switch to FP8
+    VMUL    v0, v1, v2              # Multiply 16×FP8
+
+    VSETFMT VEC_FORMAT_DECIMAL64    # Switch to decimal64
+    VADD    v0, v1, v2              # Add 2×decimal64
+```
+
+#### Vector Element Counts by Format
+
+```
+Format          Bits/Element    Elements per 128-bit vector
+────────────────────────────────────────────────────────────
+FP8 E4M3             8                    16
+FP8 E5M2             8                    16
+FP16                16                     8
+bfloat16            16                     8
+FP32                32                     4
+FP64                64                     2
+Decimal32           32                     4
+Decimal64           64                     2
+Decimal128         128                     1
+VAX F               32                     4
+VAX D               64                     2
+VAX G               64                     2
+VAX H              128                     1
+BCD (packed)         8                    16  (32 digits)
+```
+
+#### Vector Arithmetic (Format-Aware)
+
+```assembly
+# Generic vector operations (format set by VSETFMT)
+VADD    vd, vs, vt          # Vector add (any format)
+VSUB    vd, vs, vt          # Vector subtract
+VMUL    vd, vs, vt          # Vector multiply
+VDIV    vd, vs, vt          # Vector divide
+VSQRT   vd, vs              # Vector square root
+VFMA    vd, vs, vt, va      # Vector FMA
+VABS    vd, vs              # Vector absolute value
+VNEG    vd, vs              # Vector negate
+VMIN    vd, vs, vt          # Vector minimum
+VMAX    vd, vs, vt          # Vector maximum
+
+# Vector dot product (mixed precision support)
+VDOT.FP8.S   fd, vs, vt     # Dot product: FP8→float32
+VDOT.H.S     fd, vs, vt     # Dot product: bfloat16→float32
+VDOT.S.D     fd, vs, vt     # Dot product: float32→float64
+VDOT.D32.D64 fd, vs, vt     # Dot product: decimal32→decimal64
+
+# Examples - Neural Network Layer (FP8)
+neural_net_layer_fp8:
+    VSETFMT VEC_FORMAT_FP8_E4M3
+
+    LI      r10, 0          # i = 0
+    LI      r11, 128        # num_neurons
+    LI      r12, weights
+    LI      r13, inputs
+    LI      r14, outputs
+
+.loop:
+    # Load 16 FP8 weights
+    VLB.FP8 v0, 0(r12)
+
+    # Load 16 FP8 inputs
+    VLB.FP8 v1, 0(r13)
+
+    # Multiply and accumulate (convert to float32 for accumulation)
+    VDOT.FP8.S f0, v0, v1
+
+    # Add bias and apply activation
+    ADD.S   f0, f0, f_bias
+    # ReLU activation
+    MAX.S   f0, f0, f_zero
+
+    # Convert back to FP8 for next layer
+    F8CVT.E4M3.S f1, f0
+    SB.FP8  f1, 0(r14)
+
+    ADDI    r10, r10, 16
+    ADDI    r12, r12, 16
+    ADDI    r13, r13, 16
+    ADDI    r14, r14, 1
+    BLT     r10, r11, .loop
+
+# Financial Calculation (Decimal64)
+financial_sum_decimal:
+    VSETFMT VEC_FORMAT_DECIMAL64
+
+    # Sum array of monetary values (exact decimal arithmetic)
+    LI      r10, amounts_array
+    LI      r11, 1000           # 1000 amounts
+    VZERO.D v0                  # accumulator = 0.0
+
+.sum_loop:
+    VLD.64  v1, 0(r10)          # Load 2 decimal64 values
+    VADD    v0, v0, v1          # Add to accumulator
+    ADDI    r10, r10, 16        # Next 2 values
+    SUBI    r11, r11, 2
+    BGTZ    r11, .sum_loop
+
+    # Extract final sum
+    VEXTRACT.D64 f0, v0, 0      # Get first element
+    VEXTRACT.D64 f1, v0, 1      # Get second element
+    DADD.64 f0, f0, f1          # Final sum (exact!)
+```
+
+#### Mixed-Precision Vector Operations
+
+```assembly
+# Convert between formats in vectors
+VCVT.FP8.BF16  vd, vs       # 16×FP8 → 8×bfloat16 (pairwise avg)
+VCVT.BF16.FP32 vd, vs       # 8×bfloat16 → 4×float32
+VCVT.FP32.FP64 vd, vs       # 4×float32 → 2×float64
+VCVT.D32.D64   vd, vs       # 4×decimal32 → 2×decimal64
+
+# Widen operations (compute in higher precision)
+VWADD.FP8.FP32  vd, vs, vt  # Add 16×FP8, produce 16×float32
+VWMUL.BF16.FP32 vd, vs, vt  # Mul 8×bfloat16, produce 8×float32
+
+# Narrow operations (round to lower precision)
+VNADD.FP32.BF16 vd, vs, vt  # Add as float32, round to bfloat16
+VNMUL.FP64.FP32 vd, vs, vt  # Mul as float64, round to float32
+
+# Examples - Transformer Model (Mixed Precision)
+transformer_attention:
+    # Query, Key, Value in bfloat16
+    VSETFMT VEC_FORMAT_BFLOAT16
+
+    VLD.H   v_q, 0(r_query)     # Load query (8×bf16)
+    VLD.H   v_k, 0(r_key)       # Load key (8×bf16)
+
+    # Compute attention scores in float32 (higher precision)
+    VDOT.H.S f_score, v_q, v_k  # Q·K in float32
+
+    # Scale and softmax (float32)
+    MUL.S   f_score, f_score, f_scale
+    JAL     softmax_fp32
+
+    # Apply to values (mixed precision)
+    VLD.H   v_v, 0(r_value)     # Load value (8×bf16)
+
+    # Multiply: float32 score × bfloat16 value → bfloat16 output
+    VSCALE.H v_out, v_v, f_score
+
+    VST.H   v_out, 0(r_output)
+```
+
+### VAX Floating-Point with Vectors
+
+#### VAX FP Vector Operations
+
+```assembly
+# Set vector unit to VAX format
+VSETFMT VEC_FORMAT_VAX_F        # VAX F_floating (32-bit)
+VSETFMT VEC_FORMAT_VAX_D        # VAX D_floating (64-bit)
+VSETFMT VEC_FORMAT_VAX_G        # VAX G_floating (64-bit)
+VSETFMT VEC_FORMAT_VAX_H        # VAX H_floating (128-bit)
+
+# Vector operations in VAX format
+VADD    vd, vs, vt              # Vector add (VAX FP)
+VMUL    vd, vs, vt              # Vector multiply (VAX FP)
+VPOLY   vd, vs, vt, degree      # Vector polynomial (VAX POLY)
+
+# Example: Legacy VAX code acceleration
+vax_vector_computation:
+    VSETFMT VEC_FORMAT_VAX_G    # VAX G_floating (64-bit)
+
+    # Load VAX format data
+    VLD.VAX v0, data_array(r10)
+    VLD.VAX v1, coeffs(r11)
+
+    # Compute with VAX semantics (no gradual underflow)
+    VMUL    v2, v0, v1
+    VADD    v3, v2, v_bias
+
+    # Store VAX format results
+    VST.VAX v3, results(r12)
+```
+
+### Format-Specific Optimizations
+
+#### Hardware Support
+
+```c
+/*
+ * Hardware acceleration for numeric formats:
+ *
+ * Format          Hardware Unit       Throughput (ops/cycle)
+ * ─────────────────────────────────────────────────────────
+ * FP32            FPU (standard)      4 (SIMD)
+ * FP64            FPU (standard)      2 (SIMD)
+ * FP16            FPU (dedicated)     8 (SIMD)
+ * bfloat16        Tensor cores        8 (SIMD)
+ * FP8 E4M3        Tensor cores        16 (SIMD)
+ * FP8 E5M2        Tensor cores        16 (SIMD)
+ * Decimal32       DFP unit            4 (SIMD)
+ * Decimal64       DFP unit            2 (SIMD)
+ * Decimal128      DFP unit            1
+ * BCD             BCD ALU             16 digits/cycle
+ * VAX FP          FPU (emulated)      2-4 (SIMD)
+ *
+ * Total die area: ~15% of chip for all FP/numeric units
+ */
+```
+
+#### Performance Examples
+
+```c
+/* Benchmark: Matrix multiplication (1024×1024) */
+
+/* FP32 baseline */
+gemm_fp32();        // 100% performance, 100% accuracy
+
+/* bfloat16 (ML training) */
+gemm_bf16();        // 200% performance, 99.5% accuracy
+
+/* FP8 E4M3 (ML inference) */
+gemm_fp8();         // 400% performance, 98% accuracy
+
+/* Decimal64 (financial) */
+gemm_decimal64();   // 30% performance, 100% decimal accuracy
+
+/* Mixed precision (best of both) */
+gemm_mixed();       // 150% performance, 99.9% accuracy
+                    // FP8 multiply, FP32 accumulate
+```
+
+### Use Cases by Format
+
+```c
+/*
+ * Format selection guide:
+ *
+ * IEEE 754-2008 Decimal FP:
+ * - Financial applications (exact decimal representation)
+ * - Currency calculations (0.1 + 0.2 = 0.3, exactly!)
+ * - Legal/regulatory compliance (exact decimal rounding)
+ * - Accounting systems
+ * - Tax calculations
+ *
+ * BCD (Binary Coded Decimal):
+ * - Display formatting (easy digit extraction)
+ * - Embedded systems (calculator chips)
+ * - Legacy system compatibility (COBOL, mainframes)
+ * - Phone numbers, ZIP codes, SKUs
+ * - Credit card numbers
+ *
+ * bfloat16:
+ * - Machine learning training (gradients, weights)
+ * - Neural network forward/backward pass
+ * - Transformers, LLMs (GPT, BERT)
+ * - Mixed precision training
+ * - Scientific computing (where range > precision)
+ *
+ * FP8:
+ * - Deep learning inference (maximum throughput)
+ * - Quantized neural networks
+ * - Edge AI deployment
+ * - Real-time inference (video, audio)
+ * - Model compression (4× smaller than fp32)
+ *
+ * VAX FP (with vectors):
+ * - Legacy VAX/VMS application acceleration
+ * - Porting old scientific codes
+ * - Compatibility with historical data
+ */
+```
+
+## 19. Instruction Encoding Summary
 
 ### Opcode Space Allocation
 
