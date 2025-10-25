@@ -1,5 +1,7 @@
 # Chapter 6: ABI and Calling Conventions
 
+> **Note**: This chapter describes the Application Binary Interface (ABI), which is a system-level contract between compilers, libraries, and the operating system. It defines how to *use* the ISA, not the ISA instructions themselves.
+
 ## 6.1 Data Types
 
 ### Integer Types

@@ -1,8 +1,10 @@
 # Chapter 5: Binary Formats
 
+> **Note**: This chapter describes system-level binary format support, not ISA instructions. Binary loaders are implemented by operating systems and simulators, not by the CPU hardware.
+
 ## 5.1 Supported Binary Formats
 
-DLX supports three major executable formats:
+DLX systems support three major executable formats:
 - **ELF** (Executable and Linkable Format) - Unix/Linux standard
 - **PE/COFF** (Portable Executable / Common Object File Format) - Windows standard
 - **Mach-O** (Mach Object) - macOS/iOS standard

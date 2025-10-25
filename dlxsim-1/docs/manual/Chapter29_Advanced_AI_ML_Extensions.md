@@ -1,6 +1,6 @@
-# Chapter 31: Advanced AI/ML Extensions
+# Chapter 29: Advanced AI/ML Extensions
 
-## 31.1 Tensor Processing
+## 29.1 Tensor Processing
 
 ### Tensor Registers
 
@@ -33,7 +33,7 @@ treduce.max td, ts, axis        # Max reduction
 treduce.mean td, ts, axis       # Mean reduction
 ```
 
-## 31.2 Transformer Acceleration
+## 29.2 Transformer Acceleration
 
 ### Multi-Head Attention (MHA)
 
@@ -65,7 +65,7 @@ posenc      t_out, seq_len, d_model
 posenc.learned t_out, t_pos_emb, positions
 ```
 
-## 31.3 Sparse Operations
+## 29.3 Sparse Operations
 
 ### Sparse Matrix Multiply
 
@@ -97,7 +97,7 @@ struct csr_matrix {
 };
 ```
 
-## 31.4 Mixed-Precision Training
+## 29.4 Mixed-Precision Training
 
 ### Automatic Mixed Precision (AMP)
 
@@ -122,7 +122,7 @@ scale.loss  t_grad, t_grad, loss_scale
 unscale.grad t_grad, t_grad, loss_scale
 ```
 
-## 31.5 Quantization Support
+## 29.5 Quantization Support
 
 ### Symmetric Quantization
 
@@ -141,7 +141,7 @@ dequant.s8  v_out, v_in, scale, zero_point
 quantize.perchan v_out, v_in, v_scales, v_zeros, axis
 ```
 
-## 31.6 Activation Functions (Hardware Accelerated)
+## 29.6 Activation Functions (Hardware Accelerated)
 
 ```assembly
 # ReLU variants
@@ -165,7 +165,7 @@ hard_sigmoid mr_out, mr_in      # clip((x + 3) / 6, 0, 1)
 hard_swish  mr_out, mr_in       # x * hard_sigmoid(x)
 ```
 
-## 31.7 Normalization Layers
+## 29.7 Normalization Layers
 
 ```assembly
 # Batch normalization (training)
@@ -181,7 +181,7 @@ groupnorm   t_out, t_in, t_gamma, t_beta, num_groups, epsilon
 instnorm    t_out, t_in, t_gamma, t_beta, epsilon
 ```
 
-## 31.8 Convolutional Operations
+## 29.8 Convolutional Operations
 
 ### 2D Convolution
 
@@ -206,7 +206,7 @@ conv2d.sep  t_out, t_in, t_kernel_dw, t_kernel_pw, t_bias, stride, padding
 convtrans2d t_out, t_in, t_kernel, t_bias, stride, padding, output_padding
 ```
 
-## 31.9 Pooling Operations
+## 29.9 Pooling Operations
 
 ```assembly
 # Max pooling
@@ -223,7 +223,7 @@ global_avgpool t_out, t_in
 adaptive_avgpool t_out, t_in, output_size
 ```
 
-## 31.10 Embedding Operations
+## 29.10 Embedding Operations
 
 ```assembly
 # Embedding lookup
@@ -233,7 +233,7 @@ embed       t_out, t_indices, t_weight
 embed_bag   t_out, t_indices, t_weight, mode
 ```
 
-## 31.11 Recurrent Neural Networks
+## 29.11 Recurrent Neural Networks
 
 ### LSTM Cell
 
@@ -249,7 +249,7 @@ lstm_cell   h_out, c_out, x_in, h_prev, c_prev, W_ih, W_hh, b_ih, b_hh
 gru_cell    h_out, x_in, h_prev, W_ir, W_hr, W_iz, W_hz, W_in, W_hn
 ```
 
-## 31.12 Graph Neural Networks
+## 29.12 Graph Neural Networks
 
 ### Message Passing
 
@@ -266,7 +266,7 @@ gnn.scatter t_out, t_messages, t_edge_index, aggr_mode
 gcn_layer   t_out, t_x, t_adj, t_weight
 ```
 
-## 31.13 Attention Mechanisms
+## 29.13 Attention Mechanisms
 
 ### Scaled Dot-Product Attention
 
@@ -284,7 +284,7 @@ flash_attn  t_out, t_q, t_k, t_v, scale
 cross_attn  t_out, t_q, t_k, t_v, scale, mask
 ```
 
-## 31.14 Model Parallelism Support
+## 29.14 Model Parallelism Support
 
 ### Pipeline Parallelism
 
@@ -306,7 +306,7 @@ allreduce   tensor, op, comm_group
 allgather   t_out, t_in, comm_group
 ```
 
-## 31.15 Performance Optimization
+## 29.15 Performance Optimization
 
 ### Kernel Fusion
 

@@ -1,6 +1,6 @@
-# Chapter 32: Future ISA Directions
+# Chapter 30: Future ISA Directions
 
-## 32.1 DLX256 Architecture
+## 30.1 DLX256 Architecture
 
 ### 256-bit Address Space
 
@@ -26,7 +26,7 @@ addqq   rd_quad, rs_quad, rt_quad
 mulqq   rd_quad, rs_quad, rt_quad
 ```
 
-## 32.2 Photonic Computing Interface
+## 30.2 Photonic Computing Interface
 
 ### Optical Interconnect Instructions
 
@@ -42,7 +42,7 @@ wdm.mux     data_stream, wavelengths
 wdm.demux   data_stream, wavelengths
 ```
 
-## 32.3 Neuromorphic Computing Extensions
+## 30.3 Neuromorphic Computing Extensions
 
 ### Spiking Neural Network Support
 
@@ -70,7 +70,7 @@ memr.write  addr, conductance
 memr.dot    rd, addr, vector    # Dot product in memristor array
 ```
 
-## 32.4 DNA Computing Interface
+## 30.4 DNA Computing Interface
 
 ### DNA Sequence Operations
 
@@ -85,7 +85,7 @@ dna.match   rd, pattern, sequence
 dna.amplify rd, template, primers, cycles
 ```
 
-## 32.5 Advanced Quantum Extensions
+## 30.5 Advanced Quantum Extensions
 
 ### Topological Quantum Computing
 
@@ -108,7 +108,7 @@ qec.syndrome    rd, physical_qubits
 qec.correct     physical_qubits, syndrome
 ```
 
-## 32.6 Reversible Computing
+## 30.6 Reversible Computing
 
 ### Reversible Instructions
 
@@ -132,7 +132,7 @@ struct rev_stack {
 };
 ```
 
-## 32.7 Approximate Computing
+## 30.7 Approximate Computing
 
 ### Approximate Arithmetic
 
@@ -156,7 +156,7 @@ stoch.mul       rd, rs1, rs2
 stoch.decode    rd, stoch_value
 ```
 
-## 32.8 Probabilistic Computing
+## 30.8 Probabilistic Computing
 
 ### Probabilistic Bits (p-bits)
 
@@ -175,7 +175,7 @@ bayes.update posterior, likelihood, prior
 bayes.sample rd, distribution
 ```
 
-## 32.9 Homomorphic Encryption Support
+## 30.9 Homomorphic Encryption Support
 
 ### Encrypted Computation
 
@@ -187,7 +187,7 @@ he.rotate   ct_out, ct, slots   # Rotate SIMD slots
 he.bootstrap ct_out, ct         # Refresh ciphertext
 ```
 
-## 32.10 Time-Travel Debugging
+## 30.10 Time-Travel Debugging
 
 ### Reversible Execution
 
@@ -213,7 +213,7 @@ struct replay_log {
 };
 ```
 
-## 32.11 Biological Computing Interface
+## 30.11 Biological Computing Interface
 
 ### Cellular Automata Accelerator
 
@@ -238,7 +238,7 @@ ga.crossover child1, child2, parent1, parent2, crossover_point
 ga.mutate   individual, mutation_rate
 ```
 
-## 32.12 Multiverse Computing
+## 30.12 Multiverse Computing
 
 ### Parallel Universe Execution
 
@@ -253,7 +253,7 @@ universe.merge  rd, reduction_op
 universe.amplify solution_condition
 ```
 
-## 32.13 Consciousness Emulation
+## 30.13 Consciousness Emulation
 
 *Highly speculative - theoretical framework only*
 
@@ -268,7 +268,7 @@ gws.broadcast   information, workspace
 gws.access      rd, workspace
 ```
 
-## 32.14 Post-Silicon Technologies
+## 30.14 Post-Silicon Technologies
 
 ### Carbon Nanotube Computing
 
@@ -290,7 +290,7 @@ mol.or      output, input1, input2
 mol.not     output, input
 ```
 
-## 32.15 Energy Harvesting Instructions
+## 30.15 Energy Harvesting Instructions
 
 ### Ambient Energy Computing
 
@@ -305,7 +305,7 @@ energy.wait     threshold
 energy.checkpoint
 ```
 
-## 32.16 Adiabatic Computing
+## 30.16 Adiabatic Computing
 
 ### Near-Zero Energy Instructions
 
@@ -315,7 +315,7 @@ adiabatic.swap  a, b            # Near-zero energy swap
 adiabatic.not   rd, rs          # Near-zero energy inversion
 ```
 
-## 32.17 Hypercomputation
+## 30.17 Hypercomputation
 
 *Theoretical - beyond Turing computability*
 
@@ -329,7 +329,7 @@ oracle.halts    rd, program, input
 oracle.eval     rd, function_id, args
 ```
 
-## 32.18 Standardization Roadmap
+## 30.18 Standardization Roadmap
 
 ### ISA Evolution Plan
 

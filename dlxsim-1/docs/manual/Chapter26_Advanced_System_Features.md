@@ -1,6 +1,6 @@
-# Chapter 28: Advanced System Features
+# Chapter 26: Advanced System Features
 
-## 28.1 Power Management
+## 26.1 Power Management
 
 ### Dynamic Voltage and Frequency Scaling (DVFS)
 
@@ -35,7 +35,7 @@ C3  - Cache flushed
 C6  - Package sleep
 ```
 
-## 28.2 Debug and Trace
+## 26.2 Debug and Trace
 
 ### Hardware Breakpoints
 
@@ -74,7 +74,7 @@ csrw    trace_ctrl, TRACE_MEMORY
 csrr    rd, trace_data
 ```
 
-## 28.3 Error Detection and Correction (ECC)
+## 26.3 Error Detection and Correction (ECC)
 
 ### Memory ECC
 
@@ -96,7 +96,7 @@ csrr    rd, cache_ecc_status
 csrw    cache_ecc_clear, rs
 ```
 
-## 28.4 Machine Check Architecture (MCA)
+## 26.4 Machine Check Architecture (MCA)
 
 ```c
 struct mca_bank {
@@ -112,7 +112,7 @@ struct mca_bank {
 #define MCA_INTERNAL_ERROR  0x04
 ```
 
-## 28.5 Thermal Management
+## 26.5 Thermal Management
 
 ```assembly
 # Read temperature
@@ -125,7 +125,7 @@ csrw    thermal_threshold, rs   # Throttle threshold
 csrr    rd, thermal_status      # Thermal status
 ```
 
-## 28.6 Cache Management
+## 26.6 Cache Management
 
 ### Cache Coherence Protocol
 
@@ -156,7 +156,7 @@ struct cat_config {
 };
 ```
 
-## 28.7 Reliability, Availability, Serviceability (RAS)
+## 26.7 Reliability, Availability, Serviceability (RAS)
 
 ### Lockstep Execution
 
@@ -180,7 +180,7 @@ core.isolate core_id
 core.recover core_id
 ```
 
-## 28.8 Virtualization Support
+## 26.8 Virtualization Support
 
 See Chapter 17 for nested virtualization details.
 
@@ -197,7 +197,7 @@ iommu.unmap iova, size
 iommu.flush domain_id
 ```
 
-## 28.9 Quality of Service (QoS)
+## 26.9 Quality of Service (QoS)
 
 ### Memory Bandwidth Allocation
 
@@ -216,7 +216,7 @@ struct mba_config {
 csrw    cache_qos_class, rs    # QoS class for current thread
 ```
 
-## 28.10 Hardware-Assisted Verification
+## 26.10 Hardware-Assisted Verification
 
 ### Hardware Assertions
 

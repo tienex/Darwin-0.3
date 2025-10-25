@@ -1,6 +1,6 @@
-# Chapter 26: Endian Switching
+# Chapter 24: Endian Switching
 
-## 26.1 Overview
+## 24.1 Overview
 
 DLX supports dynamic endianness control:
 - **Little-endian** (default on most systems)
@@ -8,7 +8,7 @@ DLX supports dynamic endianness control:
 - **Per-privilege-level control**
 - **Bi-endian** (runtime switching)
 
-## 26.2 Endian Control Register
+## 24.2 Endian Control Register
 
 ```c
 typedef struct {
@@ -25,7 +25,7 @@ typedef struct {
 #define CSR_ENDIAN_CTRL 0x7E0
 ```
 
-## 26.3 Endian Switching Instructions
+## 24.3 Endian Switching Instructions
 
 ```assembly
 # Switch to big-endian
@@ -48,7 +48,7 @@ big_endian_path:
 done:
 ```
 
-## 26.4 Byte-Reversed Load/Store
+## 24.4 Byte-Reversed Load/Store
 
 Manual endian conversion:
 
@@ -68,7 +68,7 @@ stdbrx  rs, rd1, rd2            # Store doubleword byte-reversed indexed
     lwbrx   a0, t0, zero        # Load with byte reversal
 ```
 
-## 26.5 Byte Reversal Instructions
+## 24.5 Byte Reversal Instructions
 
 ```assembly
 # Reverse bytes
@@ -84,7 +84,7 @@ rbit    rd, rs                  # Reverse all bits
     rev32   a0, a0              # Convert endianness
 ```
 
-## 26.6 Per-Level Endianness
+## 24.6 Per-Level Endianness
 
 ```
 Ring 0 (Kernel):    Configurable (typically LE)
@@ -106,7 +106,7 @@ syscall:
     # Automatic endian switch: LE → BE
 ```
 
-## 26.7 Network Byte Order
+## 24.7 Network Byte Order
 
 ```assembly
 # Host to network byte order
@@ -123,7 +123,7 @@ ntohs   rd, rs                  # Network to host short
     sw      a0, packet_buffer
 ```
 
-## 26.8 Mixed-Endian Data Structures
+## 24.8 Mixed-Endian Data Structures
 
 ```c
 /* Structure with endian-specific fields */
@@ -140,7 +140,7 @@ void read_mixed(struct mixed_endian *p) {
 }
 ```
 
-## 26.9 Compiler Support
+## 24.9 Compiler Support
 
 ```c
 /* GCC attributes */
@@ -155,14 +155,14 @@ __attribute__((scalar_storage_order("little-endian"))) struct {
 } le_struct;
 ```
 
-## 26.10 Performance Considerations
+## 24.10 Performance Considerations
 
 - **Hardware swap**: Byte-reversed loads/stores ~1 cycle overhead
 - **Software swap**: rev32 instruction ~1 cycle
 - **Endian switching**: Automatic on privilege transitions (~0 cycles)
 - **I-cache**: Separate caches for LE/BE code (optional)
 
-## 26.11 Debugging Endian Issues
+## 24.11 Debugging Endian Issues
 
 ```assembly
 # Debug print in both endiannesses
@@ -179,7 +179,7 @@ do_print:
     ret
 ```
 
-## 26.12 ELF Support
+## 24.12 ELF Support
 
 ```c
 /* ELF flags for endianness */

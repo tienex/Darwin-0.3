@@ -1,6 +1,6 @@
-# Chapter 24: Single-Level Storage (S Extension)
+# Chapter 22: Single-Level Storage (S Extension)
 
-## 24.1 Persistent Memory Operations
+## 22.1 Persistent Memory Operations
 
 ```assembly
 # Persistent memory stores
@@ -15,7 +15,7 @@ pmemfence                       # Ensure persistence
 pmemflush   addr, size          # Flush range to persistent media
 ```
 
-## 24.2 Object Addressing
+## 22.2 Object Addressing
 
 ```assembly
 # Direct object references (128-bit addresses)

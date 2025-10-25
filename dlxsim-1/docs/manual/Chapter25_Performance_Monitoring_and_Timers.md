@@ -1,6 +1,6 @@
-# Chapter 27: Performance Monitoring and Timers
+# Chapter 25: Performance Monitoring and Timers
 
-## 27.1 Time Stamp Counter (TSC)
+## 25.1 Time Stamp Counter (TSC)
 
 64-bit counter incrementing at constant rate:
 
@@ -24,7 +24,7 @@ csrr    rd, tsc_freq            # rd ← TSC frequency in Hz
 - **Synchronized**: Consistent across cores
 - **Resolution**: Nanosecond-level on most systems
 
-## 27.2 Real-Time Clock (RTC)
+## 25.2 Real-Time Clock (RTC)
 
 High-precision wall-clock time:
 
@@ -39,7 +39,7 @@ csrr    rd, rtc                 # rd ← nanoseconds
     rem     a2, a0, t0          # Nanoseconds
 ```
 
-## 27.3 Performance Monitoring Counters (PMC)
+## 25.3 Performance Monitoring Counters (PMC)
 
 8 programmable 64-bit performance counters:
 
@@ -59,7 +59,7 @@ csrw    pmu_enable, rs          # Bitmask of enabled counters
 csrw    pmc0, zero              # Reset PMC0
 ```
 
-## 27.4 Performance Events
+## 25.4 Performance Events
 
 Over 100 hardware events available:
 
@@ -102,7 +102,7 @@ EVENT_DTLB_MISS         0x33    /* DTLB misses */
 EVENT_TLB_FLUSH         0x34    /* TLB flushes */
 ```
 
-## 27.5 Statistical Profiling
+## 25.5 Statistical Profiling
 
 Sample-based profiling with call stacks:
 
@@ -125,7 +125,7 @@ struct prof_config {
 };
 ```
 
-## 27.6 Watchpoint Timers
+## 25.6 Watchpoint Timers
 
 Programmable interval timers:
 
@@ -140,7 +140,7 @@ csrw    timer_ctrl, rs          # Control register
 csrr    rd, timer_value         # Current timer value
 ```
 
-## 27.7 Deadline Timers
+## 25.7 Deadline Timers
 
 Absolute-time timers for real-time tasks:
 
@@ -156,7 +156,7 @@ csrw    deadline_timer, rs      # Absolute TSC value
     wfi                         # Wait for interrupt
 ```
 
-## 27.8 Performance Monitoring API
+## 25.8 Performance Monitoring API
 
 ```c
 /* Configure PMC */
@@ -197,7 +197,7 @@ void measure_cache_misses(void) {
 }
 ```
 
-## 27.9 Overhead Measurement
+## 25.9 Overhead Measurement
 
 ```c
 /* Calibrate timer overhead */
@@ -215,7 +215,7 @@ uint64_t calibrate_overhead(void) {
 }
 ```
 
-## 27.10 Performance Analysis Tools
+## 25.10 Performance Analysis Tools
 
 Integration with standard tools:
 - **perf** (Linux)

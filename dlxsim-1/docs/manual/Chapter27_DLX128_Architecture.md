@@ -1,8 +1,8 @@
 # VOLUME V: FUTURE EXTENSIONS
 
-# Chapter 29: DLX128 Architecture
+# Chapter 27: DLX128 Architecture
 
-## 29.1 128-bit Instructions
+## 27.1 128-bit Instructions
 
 ```assembly
 # Load/Store 128-bit

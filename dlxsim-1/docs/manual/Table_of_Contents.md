@@ -161,44 +161,37 @@
 
 ## VOLUME IV: SYSTEM ARCHITECTURE
 
-### High-Performance I/O
-- [Chapter 22: RDMA and High-Performance Networking (P Extension)](Chapter22_RDMA_and_High_Performance_Networking.md)
-  - RDMA Operations (send, recv, read, write)
-  - InfiniBand Verbs
-  - Queue Pair Management
+> **Note**: RDMA and IOMMU/SR-IOV are simulator/device features, not ISA instructions. They have been moved to simulator documentation.
 
-- [Chapter 23: IOMMU and SR-IOV (I Extension)](Chapter23_IOMMU_and_SRIOV.md)
-  - IOMMU Operations (map, unmap, flush)
-  - SR-IOV (Virtual Function Management)
-
-- [Chapter 24: Single-Level Storage (S Extension)](Chapter24_Single_Level_Storage.md)
+### Memory and Storage
+- [Chapter 22: Single-Level Storage (S Extension)](Chapter22_Single_Level_Storage.md)
   - Persistent Memory Operations
   - Object Addressing
   - Persistent Fence and Flush
 
 ### Memory Protection and Management
-- [Chapter 25: Memory Protection and Register Banking (R Extension)](Chapter25_Memory_Protection_and_Register_Banking.md)
+- [Chapter 23: Memory Protection and Register Banking (R Extension)](Chapter23_Memory_Protection_and_Register_Banking.md)
   - Protection Ring Model (2-ring, 4-ring)
   - VMS-Style Page Protection
   - Register Banking (4 modes)
   - Domain Protection, Capability Integration
   - Multiple Page Sizes, Memory Protection Keys
 
-- [Chapter 26: Endian Switching](Chapter26_Endian_Switching.md)
+- [Chapter 24: Endian Switching](Chapter24_Endian_Switching.md)
   - Endian Control Register
   - Per-Privilege-Level Endianness
   - Byte-Reversed Load/Store
   - Network Byte Order
 
 ### Performance and System Features
-- [Chapter 27: Performance Monitoring and Timers (T Extension)](Chapter27_Performance_Monitoring_and_Timers.md)
+- [Chapter 25: Performance Monitoring and Timers (T Extension)](Chapter25_Performance_Monitoring_and_Timers.md)
   - Time Stamp Counter (TSC)
   - Real-Time Clock (RTC)
   - Performance Monitoring Counters (8 × PMC)
   - 100+ Performance Events
   - Statistical Profiling
 
-- [Chapter 28: Advanced System Features](Chapter28_Advanced_System_Features.md)
+- [Chapter 26: Advanced System Features](Chapter26_Advanced_System_Features.md)
   - Power Management (DVFS, C-states, P-states)
   - Debug and Trace
   - Error Detection and Correction (ECC)
@@ -209,16 +202,16 @@
 ## VOLUME V: FUTURE EXTENSIONS
 
 ### Extended Architectures
-- [Chapter 29: DLX128 Architecture](Chapter29_DLX128_Architecture.md)
+- [Chapter 27: DLX128 Architecture](Chapter27_DLX128_Architecture.md)
   - 128-bit Instructions (lq, sq, addq, mulq)
   - 128-bit Address Space
 
-- [Chapter 30: Moxie Compatibility Mode](Chapter30_Moxie_Compatibility_Mode.md)
+- [Chapter 28: Moxie Compatibility Mode](Chapter28_Moxie_Compatibility_Mode.md)
   - Moxie Mode Control
   - Moxie Register Mapping
   - Moxie64 Support
 
-- [Chapter 31: Advanced AI/ML Extensions](Chapter31_Advanced_AI_ML_Extensions.md)
+- [Chapter 29: Advanced AI/ML Extensions](Chapter29_Advanced_AI_ML_Extensions.md)
   - Tensor Processing
   - Transformer Acceleration (Multi-Head Attention)
   - Sparse Operations
@@ -228,7 +221,7 @@
   - Graph Neural Networks
   - Model Parallelism
 
-- [Chapter 32: Future ISA Directions](Chapter32_Future_ISA_Directions.md)
+- [Chapter 30: Future ISA Directions](Chapter30_Future_ISA_Directions.md)
   - DLX256 Architecture
   - Photonic Computing
   - Neuromorphic Computing
@@ -267,25 +260,28 @@
 | **N** | 18 | Neural network acceleration |
 | **X** | 15 | CHERI capabilities |
 | **E** | 16 | Secure enclaves with memory encryption |
-| **T** | 27 | High-precision timers and PMU |
-| **P** | 22 | RDMA and high-performance networking |
-| **I** | 23 | IOMMU and SR-IOV |
-| **R** | 25 | Register banking (4 modes) |
-| **S** | 24 | Single-level storage |
+| **T** | 25 | High-precision timers and PMU |
+| **R** | 23 | Register banking (4 modes) |
+| **S** | 22 | Single-level storage |
 | **Q** (quantum) | 20 | Quantum computing interface |
+
+**Removed Extensions (not ISA):**
+- **P** - RDMA (moved to simulator documentation - device emulation)
+- **I** - IOMMU/SR-IOV (moved to simulator documentation - device virtualization)
 
 **Additional Features:**
 - CRC/Compression (Chapter 11)
-- Endian Switching (Chapter 26)
+- Endian Switching (Chapter 24)
 - Advanced Security (Chapter 21)
-- Advanced System (Chapter 28)
-- Advanced AI/ML (Chapter 31)
-- Future ISA (Chapter 32)
+- Advanced System (Chapter 26)
+- Advanced AI/ML (Chapter 29)
+- Future ISA (Chapter 30)
 
 ---
 
-**Total Chapters**: 33 (including Front Matter and Appendices)
-**Total Extensions Documented**: 19 major extensions + 6 additional feature sets
+**Total Chapters**: 31 (including Front Matter and Appendices)
+**Removed**: 2 chapters (RDMA, IOMMU/SR-IOV - moved to simulator documentation)
+**Total ISA Extensions**: 17 major extensions + 6 additional feature sets (19 total, minus 2 non-ISA)
 **Total Instructions**: 500+
 **Total CSRs**: 150+
 **Total Performance Events**: 100+

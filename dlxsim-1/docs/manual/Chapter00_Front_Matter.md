@@ -22,6 +22,7 @@ This manual consists of **5 volumes**:
 
 **Volume I: Base Architecture** (Chapters 1-7)
 - Core ISA, registers, memory model, binary formats, ABI
+- Note: Chapters 5-6 describe system features, not ISA instructions
 
 **Volume II: Standard Extensions** (Chapters 8-14)
 - Vector, FP, BitManip, Atomic, Crypto, Compression
@@ -29,11 +30,12 @@ This manual consists of **5 volumes**:
 **Volume III: Advanced Features** (Chapters 15-21)
 - Virtualization, Security, Neural Networks, Matrix, Quantum
 
-**Volume IV: System Architecture** (Chapters 22-28)
-- Memory Protection, RDMA, IOMMU, Endian Switching, SLS
+**Volume IV: System Architecture** (Chapters 22-26)
+- Single-Level Storage, Memory Protection, Endian Switching, Performance Monitoring
+- Note: RDMA and IOMMU/SR-IOV moved to simulator documentation (not ISA)
 
-**Volume V: Future Extensions** (Chapters 29-32)
-- DLX128, AI/ML, Advanced ISA, Moxie Compatibility
+**Volume V: Future Extensions** (Chapters 27-30)
+- DLX128, Moxie Compatibility, Advanced AI/ML, Future ISA Directions
 
 ### Related Documents
 

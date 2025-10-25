@@ -1,6 +1,6 @@
-# Chapter 25: Memory Protection and Register Banking
+# Chapter 23: Memory Protection and Register Banking
 
-## 25.1 Protection Ring Model
+## 23.1 Protection Ring Model
 
 DLX supports flexible protection with 2-ring or 4-ring modes:
 
@@ -21,7 +21,7 @@ mfcr        rd, ring            # rd ← current ring
 mtcr        ring, rs            # current ring ← rs (privileged)
 ```
 
-## 25.2 VMS-Style Page Protection
+## 23.2 VMS-Style Page Protection
 
 Extended protection beyond standard RWX:
 
@@ -53,7 +53,7 @@ typedef struct {
 } vms_pte_t;
 ```
 
-## 25.3 Register Banking
+## 23.3 Register Banking
 
 Hardware context switching with separate register sets:
 
@@ -110,7 +110,7 @@ Typically shared across banks:
 - r3 (gp) - global pointer
 - r4 (tp) - thread pointer
 
-## 25.4 Domain Protection
+## 23.4 Domain Protection
 
 Memory domains with access control:
 
@@ -137,14 +137,14 @@ domain.exit return_value
 domain.call  domain_id, function, args
 ```
 
-## 25.5 Capability-Based Protection (CHERI Integration)
+## 23.5 Capability-Based Protection (CHERI Integration)
 
 Combines ring protection with capabilities:
 - Rings control privilege level
 - Capabilities control memory access
 - Both must be satisfied for access
 
-## 25.6 Multiple Page Sizes
+## 23.6 Multiple Page Sizes
 
 DLX supports multiple page sizes for efficiency:
 
@@ -165,7 +165,7 @@ DLX supports multiple page sizes for efficiency:
 #define PTE_PS_16GB     3   /* DLX extension */
 ```
 
-## 25.7 Memory Protection Keys (MPK)
+## 23.7 Memory Protection Keys (MPK)
 
 Protection keys for user-space memory protection:
 
@@ -181,7 +181,7 @@ rdpkru      rd                  # Read PKRU
 wrpkru      rs                  # Write PKRU
 ```
 
-## 25.8 Guard Pages
+## 23.8 Guard Pages
 
 Automatic guard page insertion:
 
@@ -193,7 +193,7 @@ struct guard_config {
 };
 ```
 
-## 25.9 Execute-Only Memory (XOM)
+## 23.9 Execute-Only Memory (XOM)
 
 Pages that can be executed but not read:
 
@@ -205,7 +205,7 @@ Pages that can be executed but not read:
 #define PTE_XOM     (PTE_X)     /* Execute-only (X without R) */
 ```
 
-## 25.10 Performance Considerations
+## 23.10 Performance Considerations
 
 - **Banking overhead**: 1-2 cycles for automatic switch
 - **TLB pressure**: Multiple page sizes reduce TLB misses
