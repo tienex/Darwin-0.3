@@ -11,7 +11,6 @@ CFILES = \
 	machdep.c \
 	clock.c \
 	vm_machdep.c \
-	dlx_init.c \
 	console.c \
 	keyboard.c \
 	interrupt.c \
@@ -47,7 +46,6 @@ trap.o: trap.c trap.h pmap.h console.h
 machdep.o: machdep.c pmap.h
 clock.o: clock.c trap.h
 vm_machdep.o: vm_machdep.c pmap.h
-dlx_init.o: dlx_init.c pmap.h
 console.o: console.c console.h trap.h
 keyboard.o: keyboard.c console.h trap.h
 interrupt.o: interrupt.c trap.h cpu.h

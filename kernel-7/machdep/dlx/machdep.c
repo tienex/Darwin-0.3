@@ -28,14 +28,15 @@ machine_init(void)
 void
 machine_startup(void)
 {
-	printf("DLX Architecture Support\n");
+	printf("DLX Architecture Support initialized\n");
 	printf("Page Size: %d bytes\n", PAGE_SIZE);
+	printf("TLB Entries: %d\n", DLX_TLB_ENTRIES);
 	printf("MMU Mode: ");
 
 	if (dlx_status_register & DLX_STATUS_PAGE_TABLE)
 		printf("Page Tables ");
 	if (dlx_status_register & DLX_STATUS_TLB)
-		printf("TLB ");
+		printf("+ TLB");
 	printf("\n");
 }
 

@@ -328,9 +328,10 @@ _set_special_register:
 
 /*
  * Exception Vector Table
- * Placed at fixed addresses by linker
+ * Placed at address 0x00000000 by linker script
+ * Uses Mach-O section __TEXT,__vectors
  */
-	.section .vectors, "ax"
+	.section __TEXT,__vectors
 	.globl	_exception_vectors
 _exception_vectors:
 	j	_start			/* 0x00: Reset */
