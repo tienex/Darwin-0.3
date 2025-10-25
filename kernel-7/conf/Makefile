@@ -31,7 +31,7 @@
 # (The first of the list is the arch that is used to source the
 # machine independent headers.)
 #
-HEADER_ARCHS = PPC I386
+HEADER_ARCHS = PPC I386 RISCV
 
 #
 # install parameters
@@ -48,7 +48,7 @@ TFTPDIR = /private/tftpboot
 #
 # "Post new_vers" parameters
 #
-BUILD_ARCHS = PPC I386
+BUILD_ARCHS = PPC I386 RISCV
 BUILD_TYPES = RELEASE
 
 # TAG_ARCHS = PPC I386
@@ -59,7 +59,7 @@ BUILD_TYPES = RELEASE
 # Host machine -- Default architecture
 #
 DEFAULT_TYPE = RELEASE
-DEFAULT_ARCH= `arch | awk '/ppc/ { printf("PPC") } /i386/ { printf("I386") }'`
+DEFAULT_ARCH= `arch | awk '/ppc/ { printf("PPC") } /i386/ { printf("I386") } /riscv/ { printf("RISCV") }'`
 
 #
 # Type and architecture for this build -- often overridden from

@@ -1,0 +1,89 @@
+##
+# Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+#
+# @APPLE_LICENSE_HEADER_START@
+#
+# Portions Copyright (c) 1999 Apple Computer, Inc.  All Rights
+# Reserved.  This file contains Original Code and/or Modifications of
+# Original Code as defined in and that are subject to the Apple Public
+# Source License Version 1.1 (the "License").  You may not use this file
+# except in compliance with the License.  Please obtain a copy of the
+# License at http://www.apple.com/publicsource and read it before using
+# this file.
+#
+# The Original Code and all software distributed under the License are
+# distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+# EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+# INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE OR NON- INFRINGEMENT.  Please see the
+# License for the specific language governing rights and limitations
+# under the License.
+#
+# @APPLE_LICENSE_HEADER_END@
+##
+
+#
+# Mach Operating System
+# Copyright (c) 1986 Carnegie-Mellon University
+# All rights reserved.  The CMU software License Agreement
+# specifies the terms and conditions for use and redistribution.
+#
+######################################################################
+
+######################################################################
+#BEGIN	Machine dependent Makefile fragment for RISC-V
+######################################################################
+
+ifneq "" "$(wildcard /bin/mkdirs)"
+  MKDIRS = /bin/mkdirs
+else
+  MKDIRS = /bin/mkdir -p
+endif
+
+#
+#  Compilation components
+#
+CC=	riscv64-unknown-elf-gcc
+LD=	riscv64-unknown-elf-ld
+AS=	riscv64-unknown-elf-as
+
+KCC=$(CC) -static -nostdinc -nostdlib
+
+MACHINE_INCLUDES=
+MACHINE_CFLAGS= -march=rv64g -mabi=lp64d -I$(SOURCE_DIR)/bsd/include \
+	-fno-common -fno-builtin
+MACHINE_SFLAGS= -march=rv64g -mabi=lp64d
+LDFLAGS=-T$(SOURCE_DIR)/machdep/riscv/riscv.ld \
+	-nostdlib -static
+
+MACHINE=riscv
+
+LIBS_P= -lgcc
+LIBS= -lgcc
+
+PRELDDEPS=
+
+LDOBJS_PREFIX=
+LDOBJS_SUFFIX=
+
+LDDEPS_PREFIX=
+SWAPDEPS_PREFIX=
+
+OBJSDEPS=
+
+FEATURES_EXTRA=
+
+MACHINE_INSTALL=
+
+#
+# Install machine headers.
+#
+MACHINE_COMPATHDRS=
+MACHINE_INSTALLHDRS= riscv_installhdrs
+
+riscv_installhdrs:
+	@echo "Installing RISC-V headers..."
+
+######################################################################
+#END	Machine dependent Makefile fragment for RISC-V
+######################################################################

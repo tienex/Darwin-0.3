@@ -1,0 +1,27 @@
+OPTIONS/show_space		optional show_space
+OPTIONS/eventmeter		optional eventmeter
+OPTIONS/gdb			optional gdb
+OPTIONS/iplmeas			optional iplmeas
+
+bsd/dev/vol.c			optional vol
+
+machdep/riscv/kdp_machdep.c	standard
+machdep/riscv/start.s		standard
+machdep/riscv/locore.s		standard
+machdep/riscv/trap.c		standard
+machdep/riscv/pmap.c		standard
+machdep/riscv/machdep.c		standard
+machdep/riscv/machine_clock.c	standard
+machdep/riscv/pcb.c		standard
+machdep/riscv/fault_copy.c	standard
+machdep/riscv/kern_machdep.c	standard
+machdep/riscv/sys_machdep.c	standard
+machdep/riscv/vm_machdep.c	standard
+machdep/riscv/swapgeneric.c	standard
+machdep/riscv/unix_signal.c	standard
+machdep/riscv/unix_startup.c	standard
+machdep/riscv/riscv_init.c	standard
+
+bsd/dev/riscv/conf.c		standard
+bsd/dev/riscv/cons.c		standard
+bsd/dev/riscv/kmreg_com.c	standard

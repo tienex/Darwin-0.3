@@ -132,6 +132,7 @@ extern vm_offset_t		interrupt_stack[];
 /* skip	CPU_TYPE_ALPHA		((cpu_type_t) 16)	*/
 /* skip				((cpu_type_t) 17)	*/
 #define CPU_TYPE_POWERPC		((cpu_type_t) 18)
+#define CPU_TYPE_RISCV			((cpu_type_t) 19)
 
 
 /*
@@ -276,5 +277,24 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_SUBTYPE_POWERPC_604e	((cpu_subtype_t) 7)
 #define CPU_SUBTYPE_POWERPC_620		((cpu_subtype_t) 8)
 #define CPU_SUBTYPE_POWERPC_750		((cpu_subtype_t) 9)
+
+/*
+ *	RISC-V subtypes
+ */
+#define CPU_SUBTYPE_RISCV_ALL		((cpu_subtype_t) 0)
+#define CPU_SUBTYPE_RISCV32		((cpu_subtype_t) 1)
+#define CPU_SUBTYPE_RISCV32_M		((cpu_subtype_t) 2)
+#define CPU_SUBTYPE_RISCV32_A		((cpu_subtype_t) 3)
+#define CPU_SUBTYPE_RISCV32_F		((cpu_subtype_t) 4)
+#define CPU_SUBTYPE_RISCV32_D		((cpu_subtype_t) 5)
+#define CPU_SUBTYPE_RISCV32_C		((cpu_subtype_t) 6)
+#define CPU_SUBTYPE_RISCV32_G		((cpu_subtype_t) 7)
+#define CPU_SUBTYPE_RISCV64		((cpu_subtype_t) 8)
+#define CPU_SUBTYPE_RISCV64_M		((cpu_subtype_t) 9)
+#define CPU_SUBTYPE_RISCV64_A		((cpu_subtype_t) 10)
+#define CPU_SUBTYPE_RISCV64_F		((cpu_subtype_t) 11)
+#define CPU_SUBTYPE_RISCV64_D		((cpu_subtype_t) 12)
+#define CPU_SUBTYPE_RISCV64_C		((cpu_subtype_t) 13)
+#define CPU_SUBTYPE_RISCV64_G		((cpu_subtype_t) 14)
 
 #endif	/* _MACH_MACHINE_H_ */
