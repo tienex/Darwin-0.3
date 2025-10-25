@@ -272,6 +272,81 @@ The machdep directory contains low-level kernel implementation for MMU, process 
 - `cctools-2/libmacho/arch.c`: Architecture info table
 - `cctools-2/libstuff/arch.c`: Architecture properties
 
+### Bootloader (`boot-2/mmix/`)
+
+Complete bootloader implementation for MMIX emulator:
+
+**Source Files:**
+- `bootloader/boot.s`: Assembly entry point and special register access
+- `bootloader/main.c`: Main bootloader logic
+- `bootloader/console.c`: Early console driver (memory-mapped I/O)
+- `bootloader/disk.c`: Virtual disk I/O for kernel loading
+- `bootloader/mmu.c`: Initial page table setup
+- `bootloader/boot.h`: Common definitions and boot_args structure
+- `bootloader/Makefile`: Build configuration
+
+**Boot Sequence:**
+1. Emulator loads bootloader at 0x0000000000001000
+2. Initialize MMIX special registers (rG, rL, rK)
+3. Set up console and disk devices
+4. Create identity + kernel virtual mappings
+5. Load Darwin kernel from virtual disk
+6. Transfer control to kernel at 0x8000000000100000
+
+**Memory Layout:**
+- 0x0000000000001000: Bootloader code
+- 0x0000000000100000: Kernel load area
+- 0x8000000000000000: Kernel virtual base
+
+### Device Drivers (`kernel-7/driverkit/mmix/`)
+
+DriverKit-based device drivers for MMIX emulator:
+
+**MMIXConsole** (MMIXConsole.m/h):
+- Character-based I/O via memory-mapped console
+- Base: 0xFFFFFFFF00000000
+- Non-blocking input, immediate output
+- Automatic \n to \r\n conversion
+
+**MMIXDisk** (MMIXDisk.m/h):
+- Block device with 8KB sectors
+- Base: 0xFFFFFFFF00001000
+- DMA-style sector buffer
+- Default capacity: 1 GB
+
+**MMIXTimer** (MMIXTimer.m/h):
+- High-resolution timer using rI register
+- Frequency: 1 GHz (1 tick per nanosecond)
+- Interrupt-driven timing support
+- Interval counter with automatic reload
+
+**Device Probing**: All drivers implement DriverKit probe/init pattern for automatic device discovery
+
+### Emulator Support (`emulator/`)
+
+Complete emulator specification and integration docs:
+
+**MMIX-EMULATOR-SPEC.md**: Full hardware specification
+- Processor requirements and special registers
+- Memory layout (256 MB default, up to 256 GB)
+- Device memory map with register definitions
+- Interrupt system (rK/rQ mechanism)
+- Boot sequence and kernel entry
+- GDB debugging protocol
+- Performance targets
+
+**mmix-emulator-config.example**: Sample configuration
+- Memory, CPU, and device settings
+- Console, disk, and network configuration
+- Debug and logging options
+
+**BUILDING-EMULATOR.md**: Emulator implementation guide
+- Adapting MMIXware simulator
+- Custom emulator development
+- Device implementation examples
+- Testing procedures
+- Debugging features
+
 ## Assembly Programming
 
 ### Function Prologue/Epilogue
@@ -323,6 +398,22 @@ my_function:
 
 ## Building for MMIX
 
+### Bootloader
+
+```bash
+cd boot-2/mmix/bootloader
+make
+# Output: mmix_bootloader.bin
+```
+
+### Kernel
+
+```bash
+cd kernel-7
+make ARCH=mmix
+# Output: mach_kernel.mmix
+```
+
 ### Compiler Flags
 
 ```bash
@@ -347,6 +438,27 @@ ld -arch mmix -o output input.o
 
 # Create fat binary (multiple architectures)
 lipo -create -arch ppc binary.ppc -arch mmix binary.mmix -output binary.fat
+```
+
+### Running in Emulator
+
+```bash
+# Create disk image
+dd if=/dev/zero of=darwin.img bs=8192 count=131072  # 1 GB
+
+# Copy kernel to image
+dd if=mach_kernel.mmix of=darwin.img bs=8192 conv=notrunc
+
+# Run emulator
+mmix-emulator -m 256M -d darwin.img -c stdio mmix_bootloader.bin
+
+# Expected boot output:
+# Darwin MMIX Bootloader v1.0
+# Initializing disk...
+# Loading kernel: /mach_kernel
+# Kernel loaded successfully
+# Transferring control to kernel...
+# Darwin/MMIX booting...
 ```
 
 ## Performance Characteristics
@@ -389,6 +501,21 @@ All components are **production-ready**:
   - ✅ Trap/interrupt handling
   - ✅ Context switching infrastructure
   - ✅ VM machine-dependent operations
+- ✅ **Bootloader (boot-2/mmix/)**
+  - ✅ Assembly entry point with special register init
+  - ✅ MMU and page table setup
+  - ✅ Kernel loading from disk
+  - ✅ Boot parameter passing
+- ✅ **Device Drivers (driverkit/mmix/)**
+  - ✅ Console driver (memory-mapped I/O)
+  - ✅ Disk driver (8KB sectors, DMA-style)
+  - ✅ Timer driver (rI-based, 1 GHz)
+- ✅ **Emulator Integration**
+  - ✅ Complete hardware specification
+  - ✅ Device memory map definitions
+  - ✅ Interrupt system specification
+  - ✅ Boot sequence documentation
+  - ✅ Emulator implementation guide
 
 ## References
 

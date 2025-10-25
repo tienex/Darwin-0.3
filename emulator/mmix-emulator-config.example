@@ -1,0 +1,95 @@
+# MMIX Emulator Configuration for Darwin
+# Copy to ~/.mmix-emulator.conf and customize
+
+[emulator]
+# Physical memory size
+memory = 256M
+
+# CPU frequency (for timing)
+frequency = 1000000000  # 1 GHz
+
+# Enable instruction tracing
+trace = false
+
+# Enable device debugging
+debug_devices = false
+
+[console]
+# Console type: stdio, pty, tcp, file
+type = stdio
+
+# For tcp type: port to listen on
+#port = 2323
+
+# For file type: output file
+#output = /tmp/mmix-console.log
+
+[disk]
+# Primary disk image
+image = darwin_root.img
+
+# Disk size (if creating new image)
+size = 1G
+
+# Sector size (must be 8192 for Darwin)
+sector_size = 8192
+
+# Read-only mode
+readonly = false
+
+[network]
+# Network type: none, user, tap, bridge
+type = none
+
+# MAC address
+mac = 52:54:00:12:34:56
+
+# For user network: port forwarding
+# Format: host_port:guest_port
+#port_forward = 2222:22,8080:80
+
+# For tap/bridge: interface name
+#interface = tap0
+
+[boot]
+# Bootloader binary
+bootloader = boot-2/mmix/bootloader/mmix_bootloader.bin
+
+# Kernel path (passed to bootloader)
+kernel = /mach_kernel
+
+# Boot arguments
+args = -v -s  # verbose, single-user
+
+[debug]
+# Enable GDB remote debugging
+gdb = false
+
+# GDB port
+gdb_port = 1234
+
+# Break on kernel entry
+break_on_kernel = false
+
+# Break on trap
+break_on_trap = false
+
+[devices]
+# Console device base address
+console_base = 0xFFFFFFFF00000000
+
+# Disk device base address
+disk_base = 0xFFFFFFFF00001000
+
+# Network device base address (if enabled)
+network_base = 0xFFFFFFFF00002000
+
+[logging]
+# Log level: error, warn, info, debug, trace
+level = info
+
+# Log file (empty for stderr)
+file =
+
+# Log format: text, json
+format = text
