@@ -3147,7 +3147,714 @@ SW -(sp)     STR r3,[sp,#-4]! STWU r3,-4(sp) PUSH EAX
 - Optimized stack frame management
 - Cross-platform data structure handling
 
-## 17. Instruction Encoding Summary
+## 17. Quantum Computing Emulation Acceleration
+
+### Overview
+
+DLX provides hardware acceleration for quantum computing emulation, enabling efficient simulation of quantum algorithms on classical hardware. These instructions accelerate qubit state manipulation, quantum gate operations, and measurement.
+
+### Quantum State Representation
+
+```c
+/* Qubit state (complex amplitude) */
+typedef struct {
+    double real;        /* Real component */
+    double imag;        /* Imaginary component */
+} complex_t;
+
+/* Single qubit state (2 complex amplitudes) */
+typedef struct {
+    complex_t alpha;    /* Amplitude for |0⟩ */
+    complex_t beta;     /* Amplitude for |1⟩ */
+} qubit_t;
+
+/* N-qubit state (2^N complex amplitudes) */
+typedef struct {
+    uint32_t num_qubits;        /* Number of qubits */
+    uint32_t num_amplitudes;    /* 2^num_qubits */
+    complex_t *amplitudes;      /* State vector */
+} quantum_state_t;
+
+/* Example: 3-qubit state has 2^3 = 8 complex amplitudes */
+/* Representing superposition of |000⟩, |001⟩, |010⟩, ..., |111⟩ */
+```
+
+### Quantum Register File
+
+```c
+/* Quantum accelerator registers */
+typedef struct {
+    /* Quantum state vector pointer */
+    complex_t *qstate;          /* QR0: State vector base address */
+    uint32_t qsize;             /* QR1: Number of qubits */
+    uint32_t qmask;             /* QR2: Qubit mask for operations */
+
+    /* Gate matrices (2x2 complex for single-qubit gates) */
+    complex_t gate[4];          /* QR3-QR6: Gate matrix elements */
+
+    /* Measurement results */
+    uint32_t measured_state;    /* QR7: Last measurement result */
+    double probability;         /* QR8: Measurement probability */
+
+    /* Control register */
+    uint32_t qcontrol;          /* QR9: Control bits and flags */
+} quantum_regs_t;
+
+/* Access quantum registers */
+#define SR_QSTATE       0x70    /* Quantum state vector pointer */
+#define SR_QSIZE        0x71    /* Number of qubits */
+#define SR_QMASK        0x72    /* Qubit operation mask */
+#define SR_QGATE0       0x73    /* Gate matrix element [0,0] */
+#define SR_QGATE1       0x74    /* Gate matrix element [0,1] */
+#define SR_QGATE2       0x75    /* Gate matrix element [1,0] */
+#define SR_QGATE3       0x76    /* Gate matrix element [1,1] */
+#define SR_QMEASURE     0x77    /* Measurement result */
+#define SR_QPROB        0x78    /* Measurement probability */
+#define SR_QCONTROL     0x79    /* Control register */
+```
+
+### Quantum Instructions
+
+#### State Initialization
+
+```assembly
+# Initialize quantum state
+QINIT   qubits          # Initialize |00...0⟩ state for n qubits
+QLOAD   addr, qubits    # Load quantum state from memory
+QSTORE  addr            # Store quantum state to memory
+
+# Examples
+    QINIT   3           # Initialize 3-qubit system to |000⟩
+    # State vector: [1+0i, 0+0i, 0+0i, 0+0i, 0+0i, 0+0i, 0+0i, 0+0i]
+
+    LI      r10, state_buffer
+    QLOAD   (r10), 4    # Load 4-qubit state from memory
+
+    QSTORE  (r10)       # Save current quantum state
+```
+
+#### Single-Qubit Gates
+
+```assembly
+# Pauli gates
+QX      qubit           # Pauli-X (NOT gate): |0⟩ ↔ |1⟩
+QY      qubit           # Pauli-Y gate
+QZ      qubit           # Pauli-Z gate: phase flip
+
+# Hadamard gate (creates superposition)
+QH      qubit           # Hadamard: |0⟩ → (|0⟩+|1⟩)/√2, |1⟩ → (|0⟩-|1⟩)/√2
+
+# Phase gates
+QS      qubit           # S gate: phase shift π/2
+QT      qubit           # T gate: phase shift π/4
+QPHASE  qubit, angle    # Arbitrary phase shift
+
+# Rotation gates
+QRX     qubit, angle    # Rotation around X-axis
+QRY     qubit, angle    # Rotation around Y-axis
+QRZ     qubit, angle    # Rotation around Z-axis
+
+# Examples
+    # Apply Hadamard to qubit 0 (create superposition)
+    QH      0           # |0⟩ → (|0⟩+|1⟩)/√2
+
+    # Apply Pauli-X to qubit 1 (flip)
+    QX      1           # |0⟩ → |1⟩, |1⟩ → |0⟩
+
+    # Rotate qubit 2 around Y-axis by π/4
+    LI      r3, 0x3F490FDB  # π/4 in float
+    QRY     2, r3
+```
+
+#### Two-Qubit Gates
+
+```assembly
+# CNOT gate (Controlled-NOT)
+QCNOT   control, target     # If control=|1⟩, flip target
+
+# Controlled-Z gate
+QCZ     control, target     # If control=|1⟩, apply Z to target
+
+# SWAP gate
+QSWAP   qubit1, qubit2      # Swap states of two qubits
+
+# Controlled phase
+QCPHASE control, target, angle  # Controlled phase shift
+
+# Examples
+    # Create Bell state: (|00⟩+|11⟩)/√2
+    QH      0           # Hadamard on qubit 0
+    QCNOT   0, 1        # CNOT with control=0, target=1
+
+    # SWAP qubits 2 and 3
+    QSWAP   2, 3
+```
+
+#### Three-Qubit Gates
+
+```assembly
+# Toffoli gate (CCNOT - Controlled-Controlled-NOT)
+QTOFFOLI c1, c2, target     # If c1=|1⟩ AND c2=|1⟩, flip target
+
+# Fredkin gate (CSWAP - Controlled-SWAP)
+QFREDKIN c, q1, q2          # If c=|1⟩, swap q1 and q2
+
+# Examples
+    # Toffoli gate for 3-bit AND
+    QTOFFOLI 0, 1, 2    # If qubits 0 and 1 are |1⟩, flip qubit 2
+```
+
+#### Custom Gates
+
+```assembly
+# Apply arbitrary single-qubit gate
+QGATE   qubit           # Apply gate from QR3-QR6 registers
+
+# Load gate matrix (2x2 complex matrix)
+QLOADGATE addr          # Load 4 complex numbers from memory
+
+# Examples
+    # Custom gate: Load and apply
+    LI      r10, my_gate_matrix
+    QLOADGATE (r10)     # Load matrix into gate registers
+    QGATE   0           # Apply to qubit 0
+```
+
+#### Measurement
+
+```assembly
+# Measure qubit(s)
+QMEASURE qubit          # Measure single qubit, collapse state
+QMEASURE_ALL            # Measure all qubits
+QPROB    qubit          # Get probability of measuring |1⟩ (no collapse)
+
+# Examples
+    # Measure qubit 0
+    QMEASURE 0          # Result in SR_QMEASURE (0 or 1)
+    MFSR    r3, $QMEASURE  # r3 = measurement result
+
+    # Get probability without collapsing
+    QPROB   1
+    MFSR    r4, $QPROB  # r4 = P(qubit 1 = |1⟩)
+```
+
+#### Entanglement Operations
+
+```assembly
+# Check entanglement
+QENTANGLED q1, q2, rd   # rd = 1 if q1 and q2 are entangled
+
+# Partial trace (reduce to subsystem)
+QTRACE  qubits_to_keep_mask  # Trace out other qubits
+
+# Examples
+    # Check if qubits 0 and 1 are entangled
+    QENTANGLED 0, 1, r5
+    BNEZ    r5, .is_entangled
+```
+
+### Quantum Algorithm Implementations
+
+#### Deutsch-Jozsa Algorithm
+
+```assembly
+# Deutsch-Jozsa algorithm: Determine if function is constant or balanced
+# Input: n qubits (input) + 1 qubit (output)
+# Oracle: black box implementing f(x)
+
+deutsch_jozsa:
+    # Initialize: |0⟩^n|1⟩
+    QINIT   4               # 3 input + 1 output qubit
+    QX      3               # Set output qubit to |1⟩
+
+    # Apply Hadamard to all qubits
+    QH      0
+    QH      1
+    QH      2
+    QH      3               # Now in superposition
+
+    # Apply oracle (function-specific)
+    JAL     oracle_function
+
+    # Apply Hadamard to input qubits
+    QH      0
+    QH      1
+    QH      2
+
+    # Measure input qubits
+    QMEASURE 0
+    MFSR    r3, $QMEASURE
+    QMEASURE 1
+    MFSR    r4, $QMEASURE
+    QMEASURE 2
+    MFSR    r5, $QMEASURE
+
+    # If all measurements = 0, function is constant
+    # Otherwise, function is balanced
+    OR      r6, r3, r4
+    OR      r6, r6, r5
+    BEQZ    r6, .constant_function
+
+.balanced_function:
+    LI      r1, 1           # Return 1 (balanced)
+    JR      r31
+
+.constant_function:
+    LI      r1, 0           # Return 0 (constant)
+    JR      r31
+```
+
+#### Grover's Search Algorithm
+
+```assembly
+# Grover's algorithm: Search unsorted database
+# Find item where f(x) = 1 in O(√N) time
+
+grovers_search:
+    # Initialize n qubits
+    LI      r10, 4          # Search space of 2^4 = 16 items
+    QINIT   r10
+
+    # Apply Hadamard to all qubits (equal superposition)
+    LI      r11, 0
+.hadamard_loop:
+    QH      r11
+    ADDI    r11, r11, 1
+    BGE     r11, r10, .hadamard_done
+    J       .hadamard_loop
+
+.hadamard_done:
+    # Calculate number of iterations: π/4 * √(2^n) ≈ √N
+    LI      r12, 3          # For 16 items, ~3 iterations
+
+.grover_iteration:
+    # Oracle: Mark the target state
+    JAL     grover_oracle
+
+    # Grover diffusion operator
+    JAL     grover_diffusion
+
+    # Decrement iteration counter
+    SUBI    r12, r12, 1
+    BNEZ    r12, .grover_iteration
+
+    # Measure all qubits
+    QMEASURE_ALL
+    MFSR    r1, $QMEASURE   # Result is the target item
+
+    JR      r31
+
+# Grover diffusion operator: 2|ψ⟩⟨ψ| - I
+grover_diffusion:
+    # Apply H to all qubits
+    LI      r13, 0
+.diff_h1:
+    QH      r13
+    ADDI    r13, r13, 1
+    BGE     r13, r10, .diff_h1_done
+    J       .diff_h1
+
+.diff_h1_done:
+    # Apply X to all qubits
+    LI      r13, 0
+.diff_x:
+    QX      r13
+    ADDI    r13, r13, 1
+    BGE     r13, r10, .diff_x_done
+    J       .diff_x
+
+.diff_x_done:
+    # Multi-controlled Z gate
+    # (Simplified: use Toffoli chain)
+    QTOFFOLI 0, 1, 2
+    QCZ     2, 3
+
+    # Apply X to all qubits
+    LI      r13, 0
+.diff_x2:
+    QX      r13
+    ADDI    r13, r13, 1
+    BGE     r13, r10, .diff_x2_done
+    J       .diff_x2
+
+.diff_x2_done:
+    # Apply H to all qubits
+    LI      r13, 0
+.diff_h2:
+    QH      r13
+    ADDI    r13, r13, 1
+    BGE     r13, r10, .diff_h2_done
+    J       .diff_h2
+
+.diff_h2_done:
+    JR      r31
+```
+
+#### Quantum Fourier Transform (QFT)
+
+```assembly
+# Quantum Fourier Transform
+# Essential for Shor's algorithm and phase estimation
+
+quantum_fourier_transform:
+    # Input: n qubits
+    # r10 = number of qubits
+    MFSR    r10, $QSIZE
+
+    LI      r11, 0          # i = 0
+
+.qft_outer_loop:
+    BGE     r11, r10, .qft_done
+
+    # Apply Hadamard to qubit i
+    QH      r11
+
+    # Apply controlled phase rotations
+    ADDI    r12, r11, 1     # j = i + 1
+
+.qft_inner_loop:
+    BGE     r12, r10, .qft_inner_done
+
+    # Calculate phase: 2π / 2^(j-i+1)
+    SUB     r13, r12, r11   # j - i
+    ADDI    r13, r13, 1     # j - i + 1
+    LI      r14, 1
+    SLL     r14, r14, r13   # 2^(j-i+1)
+
+    # phase = 2π / r14
+    # (Floating point calculation omitted for brevity)
+
+    QCPHASE r12, r11, r15   # Controlled phase rotation
+
+    ADDI    r12, r12, 1
+    J       .qft_inner_loop
+
+.qft_inner_done:
+    ADDI    r11, r11, 1
+    J       .qft_outer_loop
+
+.qft_done:
+    # Reverse qubit order (swap operations)
+    LI      r11, 0
+    SUBI    r12, r10, 1
+
+.qft_swap_loop:
+    BGE     r11, r12, .qft_swap_done
+    QSWAP   r11, r12
+    ADDI    r11, r11, 1
+    SUBI    r12, r12, 1
+    J       .qft_swap_loop
+
+.qft_swap_done:
+    JR      r31
+```
+
+### Hardware Implementation Details
+
+#### State Vector Operations
+
+```c
+/* Apply single-qubit gate to state vector */
+void apply_single_qubit_gate(quantum_state_t *state,
+                             int qubit,
+                             complex_t gate[4])
+{
+    uint32_t num_amplitudes = state->num_amplitudes;
+    uint32_t stride = 1 << qubit;  /* 2^qubit */
+
+    /* Iterate over state vector */
+    for (uint32_t i = 0; i < num_amplitudes; i += stride * 2) {
+        for (uint32_t j = 0; j < stride; j++) {
+            uint32_t idx0 = i + j;           /* |...0...⟩ */
+            uint32_t idx1 = i + j + stride;  /* |...1...⟩ */
+
+            complex_t a0 = state->amplitudes[idx0];
+            complex_t a1 = state->amplitudes[idx1];
+
+            /* Matrix multiplication: [gate] * [a0; a1] */
+            state->amplitudes[idx0] = complex_add(
+                complex_mul(gate[0], a0),
+                complex_mul(gate[1], a1)
+            );
+            state->amplitudes[idx1] = complex_add(
+                complex_mul(gate[2], a0),
+                complex_mul(gate[3], a1)
+            );
+        }
+    }
+}
+
+/* Apply CNOT gate */
+void apply_cnot(quantum_state_t *state, int control, int target)
+{
+    uint32_t control_bit = 1 << control;
+    uint32_t target_bit = 1 << target;
+    uint32_t num_amplitudes = state->num_amplitudes;
+
+    for (uint32_t i = 0; i < num_amplitudes; i++) {
+        /* Only flip target if control bit is 1 */
+        if (i & control_bit) {
+            uint32_t j = i ^ target_bit;  /* Flip target bit */
+            if (j > i) {
+                /* Swap amplitudes[i] and amplitudes[j] */
+                complex_t temp = state->amplitudes[i];
+                state->amplitudes[i] = state->amplitudes[j];
+                state->amplitudes[j] = temp;
+            }
+        }
+    }
+}
+```
+
+#### Measurement
+
+```c
+/* Measure qubit and collapse state */
+int measure_qubit(quantum_state_t *state, int qubit)
+{
+    uint32_t qubit_bit = 1 << qubit;
+    double prob_0 = 0.0;
+    double prob_1 = 0.0;
+
+    /* Calculate probabilities */
+    for (uint32_t i = 0; i < state->num_amplitudes; i++) {
+        double amp_squared = complex_magnitude_squared(state->amplitudes[i]);
+        if (i & qubit_bit)
+            prob_1 += amp_squared;
+        else
+            prob_0 += amp_squared;
+    }
+
+    /* Generate random number */
+    double rand_val = random_double();
+
+    int result;
+    if (rand_val < prob_0) {
+        result = 0;
+        /* Collapse to |0⟩: zero out |1⟩ amplitudes, renormalize */
+        for (uint32_t i = 0; i < state->num_amplitudes; i++) {
+            if (i & qubit_bit)
+                state->amplitudes[i] = (complex_t){0.0, 0.0};
+            else
+                state->amplitudes[i] = complex_scale(state->amplitudes[i],
+                                                     1.0 / sqrt(prob_0));
+        }
+    } else {
+        result = 1;
+        /* Collapse to |1⟩: zero out |0⟩ amplitudes, renormalize */
+        for (uint32_t i = 0; i < state->num_amplitudes; i++) {
+            if (i & qubit_bit)
+                state->amplitudes[i] = complex_scale(state->amplitudes[i],
+                                                     1.0 / sqrt(prob_1));
+            else
+                state->amplitudes[i] = (complex_t){0.0, 0.0};
+        }
+    }
+
+    return result;
+}
+```
+
+### Complex Number Operations
+
+```assembly
+# Complex arithmetic (double precision)
+CADD    rd, rs, rt          # rd = rs + rt (complex addition)
+CSUB    rd, rs, rt          # rd = rs - rt (complex subtraction)
+CMUL    rd, rs, rt          # rd = rs * rt (complex multiplication)
+CDIV    rd, rs, rt          # rd = rs / rt (complex division)
+CMAG    rd, rs              # rd = |rs| (magnitude)
+CCONJ   rd, rs              # rd = rs* (complex conjugate)
+CPHASE  rd, rs              # rd = arg(rs) (phase angle)
+
+# Complex load/store (16 bytes: 2 doubles)
+LDC     rd, (rs)            # Load complex from memory
+STC     rt, (rs)            # Store complex to memory
+
+# Examples
+    # Load two complex numbers
+    LI      r10, complex1
+    LI      r11, complex2
+    LDC     c0, (r10)       # c0 = complex1
+    LDC     c1, (r11)       # c1 = complex2
+
+    # Multiply complex numbers
+    CMUL    c2, c0, c1      # c2 = c0 * c1
+
+    # Get magnitude
+    CMAG    r12, c2         # r12 = |c2|
+```
+
+### Performance Considerations
+
+```c
+/*
+ * Quantum Emulation Performance:
+ *
+ * State vector size: 2^n complex numbers (n = number of qubits)
+ * - 1 qubit: 2 * 16 bytes = 32 bytes
+ * - 10 qubits: 1024 * 16 bytes = 16 KB
+ * - 20 qubits: 1M * 16 bytes = 16 MB
+ * - 30 qubits: 1G * 16 bytes = 16 GB
+ * - 40 qubits: 1T * 16 bytes = 16 TB (impractical)
+ *
+ * Hardware acceleration benefits:
+ * - Single-qubit gate: 2^n operations → 10-100x speedup
+ * - Two-qubit gate: 2^n operations → 10-100x speedup
+ * - Measurement: O(2^n) → 5-10x speedup
+ * - Complex arithmetic: 4-8x speedup
+ *
+ * Practical limit: ~25-30 qubits on consumer hardware
+ * Specialized hardware (GPU, FPGA): ~40-45 qubits
+ */
+```
+
+### Quantum Gate Library
+
+```c
+/* Standard quantum gates (2x2 complex matrices) */
+
+/* Pauli-X (NOT gate) */
+const complex_t GATE_X[4] = {
+    {0, 0}, {1, 0},    /* [0  1] */
+    {1, 0}, {0, 0}     /* [1  0] */
+};
+
+/* Pauli-Y gate */
+const complex_t GATE_Y[4] = {
+    {0, 0}, {0, -1},   /* [0  -i] */
+    {0, 1}, {0, 0}     /* [i   0] */
+};
+
+/* Pauli-Z gate */
+const complex_t GATE_Z[4] = {
+    {1, 0}, {0, 0},    /* [1   0] */
+    {0, 0}, {-1, 0}    /* [0  -1] */
+};
+
+/* Hadamard gate */
+const complex_t GATE_H[4] = {
+    {M_SQRT1_2, 0}, {M_SQRT1_2, 0},      /* [1/√2  1/√2] */
+    {M_SQRT1_2, 0}, {-M_SQRT1_2, 0}      /* [1/√2 -1/√2] */
+};
+
+/* S gate (phase π/2) */
+const complex_t GATE_S[4] = {
+    {1, 0}, {0, 0},    /* [1  0] */
+    {0, 0}, {0, 1}     /* [0  i] */
+};
+
+/* T gate (phase π/4) */
+const complex_t GATE_T[4] = {
+    {1, 0}, {0, 0},                    /* [1    0  ] */
+    {0, 0}, {M_SQRT1_2, M_SQRT1_2}     /* [0  e^(iπ/4)] */
+};
+```
+
+### Use Cases
+
+#### Quantum Chemistry Simulation
+
+```c
+/* Simulate molecular Hamiltonian */
+void simulate_molecule(int num_qubits)
+{
+    asm volatile(
+        "qinit  %0          \n"  /* Initialize qubits */
+        "qh     0           \n"  /* Prepare superposition */
+        /* Apply Trotter decomposition */
+        "qrx    0, %1       \n"  /* Rotation gates */
+        "qry    1, %2       \n"
+        "qcnot  0, 1        \n"  /* Entangling gates */
+        /* ... more gates ... */
+        "qmeasure_all       \n"  /* Measure final state */
+        : : "r"(num_qubits), "r"(angle1), "r"(angle2)
+    );
+}
+```
+
+#### Quantum Machine Learning
+
+```c
+/* Variational quantum eigensolver (VQE) */
+double vqe_iteration(double *params, int num_params)
+{
+    /* Prepare parameterized quantum circuit */
+    quantum_circuit_prepare(params, num_params);
+
+    /* Measure expectation value of Hamiltonian */
+    double energy = measure_hamiltonian();
+
+    /* Classical optimization updates params */
+    return energy;
+}
+```
+
+### Instruction Encoding
+
+```
+┌────────┬────┬────┬─────┬───────────────┐
+│ Opcode │qubit│func│angle│   Reserved   │  Single-qubit gates
+│   6    │ 5  │ 6  │  8  │      7        │
+└────────┴────┴────┴─────┴───────────────┘
+
+Func:
+  0x00: QX     (Pauli-X)
+  0x01: QY     (Pauli-Y)
+  0x02: QZ     (Pauli-Z)
+  0x03: QH     (Hadamard)
+  0x04: QS     (S gate)
+  0x05: QT     (T gate)
+  0x08: QRX    (Rotate X)
+  0x09: QRY    (Rotate Y)
+  0x0A: QRZ    (Rotate Z)
+  0x0B: QPHASE (Phase shift)
+
+┌────────┬────┬────┬────┬───────────────┐
+│ Opcode │ q1 │ q2 │func│   Reserved    │  Two-qubit gates
+│   6    │ 5  │ 5  │ 6  │      10       │
+└────────┴────┴────┴────┴───────────────┘
+
+Func:
+  0x00: QCNOT  (Controlled-NOT)
+  0x01: QCZ    (Controlled-Z)
+  0x02: QSWAP  (SWAP)
+  0x03: QCPHASE (Controlled phase)
+```
+
+### Summary
+
+**Key Features**:
+- Hardware-accelerated quantum gate operations
+- Support for 1-qubit, 2-qubit, and 3-qubit gates
+- State vector emulation (up to ~30 qubits practical)
+- Complex number arithmetic instructions
+- Measurement and state collapse
+- Standard gate library (Pauli, Hadamard, phase, rotation)
+- Entanglement operations
+
+**Supported Algorithms**:
+- Deutsch-Jozsa algorithm
+- Grover's search algorithm
+- Quantum Fourier Transform (QFT)
+- Shor's factoring algorithm (via QFT)
+- Variational Quantum Eigensolver (VQE)
+- Quantum chemistry simulation
+
+**Performance**:
+- 10-100x speedup vs software emulation
+- Complex arithmetic: 4-8x faster
+- Single-qubit gates: O(2^n) operations accelerated
+- Practical limit: 25-30 qubits on consumer hardware
+
+**Applications**:
+- Quantum algorithm research and development
+- Quantum chemistry and materials science
+- Cryptography and security research
+- Machine learning (quantum neural networks)
+- Optimization problems
+
+## 18. Instruction Encoding Summary
 
 ### Opcode Space Allocation
 
