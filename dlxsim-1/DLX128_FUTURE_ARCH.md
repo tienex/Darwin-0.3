@@ -619,6 +619,634 @@ nn_layer_forward:
     RET
 ```
 
+## Neural Network Extension (NN/ML/AI)
+
+### Overview
+
+Complete neural network acceleration supporting both **inference** and **backpropagation** (training):
+- Forward pass operations
+- Backward pass with gradient computation
+- Activation functions and derivatives
+- Loss functions and gradients
+- Optimizers (SGD, Momentum, Adam, RMSprop, AdaGrad)
+- Batch normalization, Layer normalization
+- Dropout with mask generation
+- Convolutional operations
+- Pooling (max, average, global)
+- Recurrent operations (LSTM, GRU)
+
+### Forward Pass Operations
+
+```assembly
+# Dense layer forward (already covered by SYSMM)
+NNFORWARD.DENSE     mr_out, mr_in, mr_weights, mr_bias
+                    # out = (in × weights) + bias
+                    # Combines matrix multiply with bias add
+
+# Activation functions
+NNACT.RELU      mr_out, mr_in           # ReLU: max(0, x)
+NNACT.RELU6     mr_out, mr_in           # ReLU6: min(max(0, x), 6)
+NNACT.GELU      mr_out, mr_in           # GELU: x * Φ(x)
+NNACT.SIGMOID   mr_out, mr_in           # Sigmoid: 1 / (1 + e^(-x))
+NNACT.TANH      mr_out, mr_in           # Tanh: (e^x - e^(-x)) / (e^x + e^(-x))
+NNACT.SWISH     mr_out, mr_in           # Swish: x * sigmoid(x)
+NNACT.MISH      mr_out, mr_in           # Mish: x * tanh(softplus(x))
+NNACT.SELU      mr_out, mr_in           # SELU (scaled exponential linear unit)
+NNACT.ELU       mr_out, mr_in, alpha    # ELU: x if x>0 else alpha*(e^x - 1)
+NNACT.LEAKY_RELU mr_out, mr_in, alpha   # Leaky ReLU: max(alpha*x, x)
+NNACT.SOFTMAX   mr_out, mr_in, axis     # Softmax: e^xi / sum(e^xj)
+NNACT.LOGSOFTMAX mr_out, mr_in, axis    # Log softmax
+
+# Normalization (forward)
+NNBN.FORWARD    mr_out, mr_in, mr_gamma, mr_beta, mr_mean, mr_var, epsilon
+                # Batch normalization forward
+                # out = gamma * (in - mean) / sqrt(var + epsilon) + beta
+NNLN.FORWARD    mr_out, mr_in, mr_gamma, mr_beta, epsilon
+                # Layer normalization forward
+
+# Dropout (forward)
+NNDROPOUT.FWD   mr_out, mr_in, mr_mask, dropout_rate
+                # out = in * mask / (1 - dropout_rate)
+NNDROPOUT.GEN_MASK mr_mask, shape, dropout_rate
+                # Generate random dropout mask
+
+# Convolution forward
+NNCONV2D.FWD    mr_out, mr_in, mr_kernel, mr_bias, stride, padding
+                # 2D convolution forward
+                # out[b,h,w,c] = sum(in[b,h',w',c'] * kernel[kh,kw,c',c]) + bias[c]
+
+# Pooling forward
+NNPOOL.MAX      mr_out, mr_in, kernel_size, stride, padding
+                # Max pooling: out = max(input_window)
+NNPOOL.AVG      mr_out, mr_in, kernel_size, stride, padding
+                # Average pooling: out = mean(input_window)
+NNPOOL.GLOBAL_AVG mr_out, mr_in
+                # Global average pooling: out = mean(input, axes=[H,W])
+
+# Example: Forward pass through dense layer
+dense_forward:
+    # Input: mr0 (batch × in_features)
+    # Weights: mr1 (in_features × out_features)
+    # Bias: vr0 (out_features)
+    # Output: mr2 (batch × out_features)
+
+    # Matrix multiply
+    MMUL        mr2, mr0, mr1
+
+    # Add bias (broadcast)
+    MVADD       mr2, mr2, vr0
+
+    # Apply ReLU
+    NNACT.RELU  mr2, mr2
+
+    RET
+```
+
+### Backward Pass (Backpropagation)
+
+```assembly
+# Dense layer backward
+NNBACKWARD.DENSE    mr_grad_in, mr_grad_weights, mr_grad_bias, \
+                    mr_grad_out, mr_input, mr_weights
+                    # Compute gradients for dense layer
+                    # grad_in = grad_out × weights^T
+                    # grad_weights = input^T × grad_out
+                    # grad_bias = sum(grad_out, axis=0)
+
+# Activation function gradients
+NNGRAD.RELU         mr_grad_in, mr_grad_out, mr_input
+                    # grad_in = grad_out * (input > 0)
+NNGRAD.SIGMOID      mr_grad_in, mr_grad_out, mr_output
+                    # grad_in = grad_out * output * (1 - output)
+NNGRAD.TANH         mr_grad_in, mr_grad_out, mr_output
+                    # grad_in = grad_out * (1 - output^2)
+NNGRAD.GELU         mr_grad_in, mr_grad_out, mr_input
+                    # grad_in = grad_out * gelu_derivative(input)
+NNGRAD.SWISH        mr_grad_in, mr_grad_out, mr_input
+                    # grad_in = grad_out * swish_derivative(input)
+NNGRAD.SOFTMAX      mr_grad_in, mr_grad_out, mr_output
+                    # grad_in = grad_out * jacobian(softmax)
+
+# Batch normalization backward
+NNBN.BACKWARD       mr_grad_in, mr_grad_gamma, mr_grad_beta, \
+                    mr_grad_out, mr_input, mr_gamma, mr_mean, mr_var, epsilon
+                    # Compute BN gradients (complex!)
+
+# Dropout backward
+NNDROPOUT.BWD       mr_grad_in, mr_grad_out, mr_mask, dropout_rate
+                    # grad_in = grad_out * mask / (1 - dropout_rate)
+
+# Convolution backward
+NNCONV2D.BWD_INPUT  mr_grad_in, mr_grad_out, mr_kernel, stride, padding
+                    # Gradient w.r.t. input
+NNCONV2D.BWD_KERNEL mr_grad_kernel, mr_grad_out, mr_input, stride, padding
+                    # Gradient w.r.t. kernel
+NNCONV2D.BWD_BIAS   vr_grad_bias, mr_grad_out
+                    # Gradient w.r.t. bias: sum over batch/spatial
+
+# Pooling backward
+NNPOOL.MAX_BWD      mr_grad_in, mr_grad_out, mr_input, mr_indices
+                    # Max pool backward (needs indices from forward)
+NNPOOL.AVG_BWD      mr_grad_in, mr_grad_out, kernel_size, stride
+                    # Average pool backward (uniform distribution)
+
+# Example: Backward pass through dense layer
+dense_backward:
+    # Inputs:
+    # mr0 = grad_output (batch × out_features)
+    # mr1 = layer_input (batch × in_features)
+    # mr2 = weights (in_features × out_features)
+
+    # Gradient w.r.t. input: grad_in = grad_out × W^T
+    MMUL.T      mr3, mr0, mr2           # mr3 = grad_input
+
+    # Gradient w.r.t. weights: grad_W = input^T × grad_out
+    MTRANS      mr4, mr1                # mr4 = input^T
+    MMUL        mr5, mr4, mr0           # mr5 = grad_weights
+
+    # Gradient w.r.t. bias: grad_b = sum(grad_out, axis=0)
+    MSUM.AXIS   vr6, mr0, 0             # vr6 = grad_bias
+
+    # Return gradients
+    # mr3 = grad_input
+    # mr5 = grad_weights
+    # vr6 = grad_bias
+
+    RET
+```
+
+### Loss Functions
+
+```assembly
+# Cross-entropy loss
+NNLOSS.CROSSENT     vr_loss, mr_logits, mr_labels
+                    # loss = -sum(labels * log(softmax(logits)))
+NNLOSS.CROSSENT.GRAD mr_grad, mr_logits, mr_labels
+                    # grad = softmax(logits) - labels
+
+# Mean squared error
+NNLOSS.MSE          vr_loss, mr_pred, mr_target
+                    # loss = mean((pred - target)^2)
+NNLOSS.MSE.GRAD     mr_grad, mr_pred, mr_target
+                    # grad = 2 * (pred - target) / N
+
+# Binary cross-entropy
+NNLOSS.BCE          vr_loss, mr_pred, mr_target
+                    # loss = -mean(target*log(pred) + (1-target)*log(1-pred))
+NNLOSS.BCE.GRAD     mr_grad, mr_pred, mr_target
+                    # grad = (pred - target) / (pred * (1 - pred))
+
+# Hinge loss (SVM)
+NNLOSS.HINGE        vr_loss, mr_scores, mr_labels
+                    # loss = mean(max(0, 1 - scores * labels))
+NNLOSS.HINGE.GRAD   mr_grad, mr_scores, mr_labels
+                    # grad = -labels if (1 - scores*labels) > 0 else 0
+
+# Example: Compute cross-entropy loss and gradient
+compute_loss_and_grad:
+    # mr0 = logits (batch × classes)
+    # mr1 = labels (batch × classes, one-hot)
+
+    # Compute loss
+    NNLOSS.CROSSENT     v0, mr0, mr1        # v0 = loss value
+
+    # Compute gradient
+    NNLOSS.CROSSENT.GRAD mr2, mr0, mr1      # mr2 = gradient
+
+    RET
+```
+
+### Optimizers
+
+```assembly
+# Stochastic Gradient Descent (SGD)
+NNOPT.SGD           mr_params, mr_grads, learning_rate
+                    # params -= learning_rate * grads
+
+# SGD with momentum
+NNOPT.SGD.MOMENTUM  mr_params, mr_grads, mr_velocity, lr, momentum
+                    # velocity = momentum * velocity - lr * grads
+                    # params += velocity
+
+# Adam optimizer
+NNOPT.ADAM          mr_params, mr_grads, mr_m, mr_v, lr, beta1, beta2, epsilon, t
+                    # m = beta1 * m + (1 - beta1) * grads
+                    # v = beta2 * v + (1 - beta2) * grads^2
+                    # m_hat = m / (1 - beta1^t)
+                    # v_hat = v / (1 - beta2^t)
+                    # params -= lr * m_hat / (sqrt(v_hat) + epsilon)
+
+# RMSprop
+NNOPT.RMSPROP       mr_params, mr_grads, mr_cache, lr, decay, epsilon
+                    # cache = decay * cache + (1 - decay) * grads^2
+                    # params -= lr * grads / (sqrt(cache) + epsilon)
+
+# AdaGrad
+NNOPT.ADAGRAD       mr_params, mr_grads, mr_cache, lr, epsilon
+                    # cache += grads^2
+                    # params -= lr * grads / (sqrt(cache) + epsilon)
+
+# Example: Adam update step
+adam_update:
+    # Parameters
+    # mr0 = model parameters
+    # mr1 = gradients
+    # mr2 = first moment (m)
+    # mr3 = second moment (v)
+    # a0 = learning_rate
+    # a1 = beta1 (0.9)
+    # a2 = beta2 (0.999)
+    # a3 = epsilon (1e-8)
+    # a4 = timestep
+
+    NNOPT.ADAM  mr0, mr1, mr2, mr3, a0, a1, a2, a3, a4
+
+    # mr0 now contains updated parameters
+    # mr2 contains updated m
+    # mr3 contains updated v
+
+    RET
+```
+
+### Recurrent Neural Networks
+
+```assembly
+# LSTM cell forward
+NNLSTM.CELL.FWD     vr_h_out, vr_c_out, vr_h_in, vr_c_in, vr_x, \
+                    mr_W_ih, mr_W_hh, vr_b_ih, vr_b_hh
+                    # LSTM cell forward pass
+                    # Computes input, forget, cell, output gates
+                    # h_out = output_gate * tanh(c_out)
+                    # c_out = forget_gate * c_in + input_gate * cell_gate
+
+# LSTM cell backward
+NNLSTM.CELL.BWD     vr_grad_h_in, vr_grad_c_in, vr_grad_x, \
+                    mr_grad_W_ih, mr_grad_W_hh, vr_grad_b_ih, vr_grad_b_hh, \
+                    vr_grad_h_out, vr_grad_c_out, \
+                    vr_h_in, vr_c_in, vr_x, mr_W_ih, mr_W_hh
+                    # LSTM cell backward pass
+
+# GRU cell forward
+NNGRU.CELL.FWD      vr_h_out, vr_h_in, vr_x, mr_W_ir, mr_W_hr, mr_W_iz, mr_W_hz, mr_W_in, mr_W_hn
+                    # GRU cell forward pass
+
+# GRU cell backward
+NNGRU.CELL.BWD      vr_grad_h_in, vr_grad_x, mr_grad_W, vr_grad_h_out, vr_h_in, vr_x, mr_W
+                    # GRU cell backward pass
+
+# Example: LSTM forward pass (sequence)
+lstm_forward_sequence:
+    # Input: mr0 = input sequence (seq_len × batch × input_size)
+    # Weights: mr1 = W_ih, mr2 = W_hh
+    # Bias: vr3 = b_ih, vr4 = b_hh
+    # Initial state: vr5 = h_0, vr6 = c_0
+
+    LI      t0, 0                   # t = 0
+.loop:
+    # Get input at timestep t
+    MGET_ROW    vr7, mr0, t0        # x_t = input[t]
+
+    # LSTM cell
+    NNLSTM.CELL.FWD vr5, vr6, vr5, vr6, vr7, mr1, mr2, vr3, vr4
+
+    # Store output
+    MSET_ROW    mr8, t0, vr5        # output[t] = h_t
+
+    ADDI    t0, t0, 1
+    BLT     t0, seq_len, .loop
+
+    # mr8 contains output sequence
+    # vr5 contains final h
+    # vr6 contains final c
+
+    RET
+```
+
+### Attention Mechanisms
+
+```assembly
+# Scaled dot-product attention
+NNATT.SDPA          mr_out, mr_Q, mr_K, mr_V, mr_mask, scale
+                    # Attention(Q,K,V) = softmax(Q×K^T / sqrt(d_k)) × V
+
+# Multi-head attention
+NNATT.MHA.FWD       mr_out, mr_input, mr_W_q, mr_W_k, mr_W_v, mr_W_o, num_heads
+                    # Multi-head attention forward
+
+# Multi-head attention backward
+NNATT.MHA.BWD       mr_grad_in, mr_grad_W_q, mr_grad_W_k, mr_grad_W_v, mr_grad_W_o, \
+                    mr_grad_out, mr_input, mr_W_q, mr_W_k, mr_W_v, num_heads
+                    # Multi-head attention backward
+
+# Example: Self-attention layer
+self_attention:
+    # Input: mr0 (seq_len × d_model)
+    # Weights: mr1=W_q, mr2=W_k, mr3=W_v, mr4=W_o
+
+    # Multi-head attention
+    NNATT.MHA.FWD   mr5, mr0, mr1, mr2, mr3, mr4, 8    # 8 heads
+
+    # Add & Norm (residual connection)
+    MADD            mr6, mr0, mr5           # residual
+    NNLN.FORWARD    mr7, mr6, vr8, vr9, 1e-6    # layer norm
+
+    RET
+```
+
+### Transformer Blocks
+
+```assembly
+# Transformer encoder block (forward)
+NNTRANS.ENC.FWD     mr_out, mr_in, mr_W_attn, mr_W_ffn, mr_ln_params
+                    # Combines multi-head attention + feed-forward
+                    # out = LayerNorm(x + FFN(LayerNorm(x + MHA(x))))
+
+# Transformer decoder block (forward)
+NNTRANS.DEC.FWD     mr_out, mr_in, mr_enc_out, mr_W_self_attn, mr_W_cross_attn, mr_W_ffn
+                    # Decoder with self-attention and cross-attention
+
+# Transformer encoder block (backward)
+NNTRANS.ENC.BWD     mr_grad_in, mr_grad_W_attn, mr_grad_W_ffn, \
+                    mr_grad_out, mr_input, mr_W_attn, mr_W_ffn
+                    # Backward pass through encoder block
+
+# Example: Full transformer encoder
+transformer_encoder:
+    # Input: mr0 (seq_len × d_model)
+    # 6 encoder layers
+
+    LI      t0, 0
+.loop:
+    # Load layer weights
+    JAL     load_layer_weights      # mr1=W_attn, mr2=W_ffn, mr3=ln_params
+
+    # Encoder block
+    NNTRANS.ENC.FWD mr0, mr0, mr1, mr2, mr3
+
+    ADDI    t0, t0, 1
+    BLT     t0, 6, .loop
+
+    # mr0 contains encoder output
+    RET
+```
+
+### Complete Training Loop
+
+```assembly
+# Complete training iteration (forward + backward + update)
+NNTRAIN.ITER        mr_loss, mr_params, mr_grads, mr_opt_state, \
+                    mr_input, mr_target, model_config, opt_config
+                    # Performs:
+                    # 1. Forward pass through model
+                    # 2. Compute loss
+                    # 3. Backward pass (compute gradients)
+                    # 4. Optimizer step
+                    # Returns loss value
+
+# Example: Complete training loop
+training_loop:
+    # Hyperparameters
+    LI      a0, 100                 # num_epochs
+    LI      a1, 32                  # batch_size
+    FLOAD   fa0, learning_rate      # 0.001
+
+    # Initialize optimizer state (Adam)
+    JAL     init_adam_state         # mr10=m, mr11=v
+
+.epoch_loop:
+    LI      t0, 0                   # batch counter
+
+.batch_loop:
+    # Load batch
+    JAL     load_batch              # mr0=input, mr1=target
+
+    # Forward pass
+    JAL     model_forward           # mr2=logits
+
+    # Compute loss and gradients
+    NNLOSS.CROSSENT     v0, mr2, mr1        # v0=loss
+    NNLOSS.CROSSENT.GRAD mr3, mr2, mr1      # mr3=grad_output
+
+    # Backward pass
+    JAL     model_backward          # Computes gradients in mr4-mr9
+
+    # Adam update
+    NNOPT.ADAM  mr4, mr4, mr10, mr11, fa0, 0.9, 0.999, 1e-8, t0
+    NNOPT.ADAM  mr5, mr5, mr10, mr11, fa0, 0.9, 0.999, 1e-8, t0
+    # ... update all parameter matrices ...
+
+    # Print loss
+    FCVT.W.S    a0, v0
+    JAL         print_loss
+
+    ADDI    t0, t0, 1
+    BLT     t0, batches_per_epoch, .batch_loop
+
+    # Validation
+    JAL     validate_model
+
+    ADDI    a0, a0, -1
+    BNEZ    a0, .epoch_loop
+
+    RET
+
+# Model forward (example: 2-layer MLP)
+model_forward:
+    # Input: mr0 (batch × 784)
+    # Layer 1: 784 → 256
+    MMUL        mr2, mr0, mr_W1         # mr2 = input × W1
+    MVADD       mr2, mr2, vr_b1         # Add bias
+    NNACT.RELU  mr2, mr2                # ReLU
+
+    # Layer 2: 256 → 10
+    MMUL        mr3, mr2, mr_W2         # mr3 = hidden × W2
+    MVADD       mr3, mr3, vr_b2         # Add bias
+
+    # Return logits in mr3 (no softmax - done in loss)
+    MOV         mr2, mr3
+
+    RET
+
+# Model backward (example: 2-layer MLP)
+model_backward:
+    # Input: mr3 = grad_output (batch × 10)
+    #        mr2 = hidden_output (batch × 256) (saved from forward)
+    #        mr0 = input (batch × 784)
+
+    # Backward through layer 2
+    MTRANS      mr4, mr2                # hidden^T
+    MMUL        mr5, mr4, mr3           # grad_W2 = hidden^T × grad_out
+    MSUM.AXIS   vr6, mr3, 0             # grad_b2 = sum(grad_out, axis=0)
+    MMUL.T      mr7, mr3, mr_W2         # grad_hidden = grad_out × W2^T
+
+    # Backward through ReLU
+    NNGRAD.RELU mr7, mr7, mr2           # grad_hidden *= (hidden > 0)
+
+    # Backward through layer 1
+    MTRANS      mr8, mr0                # input^T
+    MMUL        mr9, mr8, mr7           # grad_W1 = input^T × grad_hidden
+    MSUM.AXIS   vr10, mr7, 0            # grad_b1 = sum(grad_hidden, axis=0)
+
+    # Gradients:
+    # mr5=grad_W2, vr6=grad_b2, mr9=grad_W1, vr10=grad_b1
+
+    RET
+```
+
+### Mixed Precision Training
+
+```assembly
+# Automatic mixed precision (FP16/BF16 forward, FP32 backward)
+NNTRAIN.AMP.FWD     mr_out_fp16, mr_in_fp16, mr_W_fp16
+                    # Forward in FP16 (faster)
+
+NNTRAIN.AMP.BWD     mr_grad_fp32, mr_grad_out_fp16, mr_input_fp16
+                    # Backward in FP32 (accurate)
+
+# Loss scaling for FP16 training
+NNAMP.SCALE_LOSS    vr_scaled_loss, vr_loss, scale_factor
+                    # Scale loss to prevent underflow
+
+NNAMP.UNSCALE_GRAD  mr_grad, mr_scaled_grad, scale_factor
+                    # Unscale gradients before optimizer step
+
+# Example: Mixed precision training
+amp_training_step:
+    # Convert inputs to FP16
+    FCVT.H.S    mr0_fp16, mr0_fp32      # Input to FP16
+
+    # Forward in FP16
+    NNTRAIN.AMP.FWD mr1_fp16, mr0_fp16, mr_W_fp16
+
+    # Convert output to FP32 for loss
+    FCVT.S.H    mr1_fp32, mr1_fp16
+
+    # Compute loss (FP32)
+    NNLOSS.CROSSENT v0, mr1_fp32, mr_target_fp32
+
+    # Scale loss
+    NNAMP.SCALE_LOSS v0_scaled, v0, 1024.0
+
+    # Backward (FP32)
+    NNLOSS.CROSSENT.GRAD mr_grad_fp32, mr1_fp32, mr_target_fp32
+
+    # Unscale gradients
+    NNAMP.UNSCALE_GRAD mr_grad_fp32, mr_grad_fp32, 1024.0
+
+    # Update (FP32)
+    NNOPT.ADAM  mr_W_fp32, mr_grad_fp32, mr_m, mr_v, lr, ...
+
+    # Convert weights back to FP16 for next forward
+    FCVT.H.S    mr_W_fp16, mr_W_fp32
+
+    RET
+```
+
+### Performance Characteristics
+
+```c
+/* Neural network operations performance */
+
+/* Dense layer (1024 × 1024 @ FP32) */
+/* - Forward: 2 × 1024³ = 2.15 GFLOP */
+/* - On systolic array @ 3 GHz: ~170 μs */
+/* - Throughput: 12.6 TFLOPS */
+
+/* Backward: */
+/* - grad_input: 2 × 1024³ = 2.15 GFLOP */
+/* - grad_weights: 2 × 1024³ = 2.15 GFLOP */
+/* - Total: 4.3 GFLOP */
+/* - Time: ~340 μs */
+
+/* Convolution (224×224×3 → 224×224×64, 3×3 kernel) */
+/* - Forward: 2 × 224² × 64 × 3² × 3 = 173 MFLOP */
+/* - Backward (input + weights): ~346 MFLOP */
+
+/* LSTM cell (hidden_size = 1024) */
+/* - Forward: ~33 MFLOP (4 matrix-vector multiplies + activations) */
+/* - Backward: ~66 MFLOP */
+
+/* Transformer layer (d_model=512, seq_len=512, 8 heads) */
+/* - Self-attention: ~805 MFLOP */
+/* - Feed-forward (4×expansion): ~2.1 GFLOP */
+/* - Total forward: ~2.9 GFLOP per layer */
+/* - 12 layers: ~35 GFLOP forward pass */
+/* - Backward: ~70 GFLOP */
+```
+
+### Memory Requirements
+
+```c
+/* Memory for training */
+
+/* Model parameters (example: ResNet-50) */
+/* - 25.6M parameters × 4 bytes (FP32) = 102 MB */
+/* - Gradients: 102 MB */
+/* - Adam optimizer state (m, v): 204 MB */
+/* - Total: ~408 MB */
+
+/* Activations (for backpropagation) */
+/* - Depends on batch size and model depth */
+/* - ResNet-50, batch=32: ~2 GB */
+
+/* Can use activation checkpointing to trade compute for memory */
+```
+
+### Example: Full ResNet Training
+
+```assembly
+# Simplified ResNet-18 training
+resnet18_train_epoch:
+    # For each batch in training set
+    LI      t0, 0
+.batch_loop:
+    # Load batch (32 × 224 × 224 × 3)
+    JAL     load_image_batch        # mr0 = images, mr1 = labels
+
+    # Forward pass through ResNet-18
+    # Conv1: 224×224×3 → 112×112×64
+    NNCONV2D.FWD    mr2, mr0, mr_conv1_W, vr_conv1_b, 2, 3
+    NNBN.FORWARD    mr2, mr2, vr_bn1_gamma, vr_bn1_beta, vr_bn1_mean, vr_bn1_var, 1e-5
+    NNACT.RELU      mr2, mr2
+
+    # MaxPool: 112×112×64 → 56×56×64
+    NNPOOL.MAX      mr2, mr2, 3, 2, 1
+
+    # Residual blocks (simplified - just showing structure)
+    JAL     resnet_block1           # 56×56×64
+    JAL     resnet_block2           # 28×28×128
+    JAL     resnet_block3           # 14×14×256
+    JAL     resnet_block4           # 7×7×512
+
+    # Global average pooling: 7×7×512 → 512
+    NNPOOL.GLOBAL_AVG vr3, mr2
+
+    # FC layer: 512 → 1000
+    MMVMUL      vr4, mr_fc_W, vr3
+    VADD        vr4, vr4, vr_fc_b
+
+    # Loss
+    NNLOSS.CROSSENT     v0, vr4, mr1       # v0 = loss
+    NNLOSS.CROSSENT.GRAD vr5, vr4, mr1     # vr5 = grad_output
+
+    # Backward pass (similar structure)
+    JAL     resnet_backward
+
+    # Update all parameters with Adam
+    JAL     adam_update_all_params
+
+    # Print loss every 100 iterations
+    ANDI    t1, t0, 0x3F            # t0 % 64
+    BNEZ    t1, .skip_print
+    JAL     print_loss
+.skip_print:
+
+    ADDI    t0, t0, 1
+    BLT     t0, batches_per_epoch, .batch_loop
+
+    RET
+```
+
 ## DSP Accumulator Registers
 
 ### Variable-Length Accumulators
