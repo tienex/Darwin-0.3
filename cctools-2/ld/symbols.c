@@ -3138,10 +3138,19 @@ output_local_symbols(void)
 	}
 #ifndef RLD
 	if(host_byte_sex != target_byte_sex){
-	    nlist = (struct nlist *)(output_addr + flush_symbol_offset);
-	    swap_nlist(nlist, output_nsyms, target_byte_sex);
+	    if(output_64bit){
+		nlist_64 = (struct nlist_64 *)(output_addr + flush_symbol_offset);
+		swap_nlist_64(nlist_64, output_nsyms, target_byte_sex);
+	    }
+	    else{
+		nlist = (struct nlist *)(output_addr + flush_symbol_offset);
+		swap_nlist(nlist, output_nsyms, target_byte_sex);
+	    }
 	}
-	output_flush(flush_symbol_offset, output_nsyms * sizeof(struct nlist));
+	if(output_64bit)
+	    output_flush(flush_symbol_offset, output_nsyms * sizeof(struct nlist_64));
+	else
+	    output_flush(flush_symbol_offset, output_nsyms * sizeof(struct nlist));
 	output_flush(flush_string_offset, output_symtab_info.
 					  output_local_strsize -
 					  start_string_size);
@@ -3168,12 +3177,21 @@ unsigned long index)
 {
     unsigned long i, output_nsyms, section_type;
     struct nlist *object_symbols;
+    struct nlist_64 *object_symbols_64;
     char *object_strings;
 
 	/* setup pointers to the symbol table and string table */
-	object_symbols = (struct nlist *)(obj->obj_addr +
-					  obj->symtab->symoff);
 	object_strings = (char *)(obj->obj_addr + obj->symtab->stroff);
+	if(obj->is_64bit){
+	    object_symbols_64 = (struct nlist_64 *)(obj->obj_addr +
+						     obj->symtab->symoff);
+	    object_symbols = NULL;
+	}
+	else{
+	    object_symbols = (struct nlist *)(obj->obj_addr +
+					      obj->symtab->symoff);
+	    object_symbols_64 = NULL;
+	}
 	output_nsyms = 0;
 	/* If we are creating section object symbols, count one if needed */
 	if(sect_object_symbols.ms != NULL){
@@ -3191,15 +3209,32 @@ unsigned long index)
 	}
 
 	for(i = 0; i < obj->symtab->nsyms; i++){
+	    unsigned char sym_type, sym_sect;
+	    unsigned long sym_strx;
+	    unsigned long long sym_value;
+
+	    /* Extract symbol fields from input (32-bit or 64-bit) */
+	    if(obj->is_64bit){
+		sym_type = object_symbols_64[i].n_type;
+		sym_sect = object_symbols_64[i].n_sect;
+		sym_strx = object_symbols_64[i].n_un.n_strx;
+		sym_value = object_symbols_64[i].n_value;
+	    }
+	    else{
+		sym_type = object_symbols[i].n_type;
+		sym_sect = object_symbols[i].n_sect;
+		sym_strx = object_symbols[i].n_un.n_strx;
+		sym_value = object_symbols[i].n_value;
+	    }
+
 	    /*
 	     * If this is a local symbol and it is to be in the output file then
 	     * count it.
 	     */
-	    if((object_symbols[i].n_type & N_EXT) == 0 && 
+	    if((sym_type & N_EXT) == 0 &&
 	       (strip_level == STRIP_NONE ||
-	        is_output_local_symbol(object_symbols[i].n_type,
-		    object_symbols[i].n_un.n_strx == 0 ? "" :
-		    object_strings + object_symbols[i].n_un.n_strx))){
+	        is_output_local_symbol(sym_type,
+		    sym_strx == 0 ? "" : object_strings + sym_strx))){
 
 		/*
 		 * If symbols were removed from this object when merging
@@ -3207,17 +3242,16 @@ unsigned long index)
 		 * was removed.  If so continue and don't put out this symbol.
 		 */
 		if(obj->symbols_removed == TRUE &&
-		   (object_symbols[i].n_type & N_TYPE) == N_SECT){
-		    section_type = (obj->section_maps[object_symbols[i].
-				    n_sect - 1].s->flags) & SECTION_TYPE;
+		   (sym_type & N_TYPE) == N_SECT){
+		    section_type = (obj->section_maps[sym_sect - 1].s->flags) &
+				   SECTION_TYPE;
 		    if((section_type == S_NON_LAZY_SYMBOL_POINTERS ||
 		        section_type == S_LAZY_SYMBOL_POINTERS ||
 		        section_type == S_SYMBOL_STUBS) &&
 		       fine_reloc_offset_in_output(
-			   &(obj->section_maps[object_symbols[i].n_sect-1]),
-			   object_symbols[i].n_value - 
-			   obj->section_maps[object_symbols[i].n_sect - 1].
-			   s->addr) == FALSE)
+			   &(obj->section_maps[sym_sect-1]),
+			   sym_value -
+			   obj->section_maps[sym_sect - 1].s->addr) == FALSE)
 			continue;
 		}
 		/*
