@@ -3254,7 +3254,7 @@ enum bool dylib_only)
 		    }
 		    else{
 			if(s->nreloc != 0){
-			    if(mh->cputype == 0 && mh->cpusubtype == 0){
+			    if(cputype == 0 && cpusubtype == 0){
 				error_with_cur_obj("section %lu (%.16s,%.16s)"
 				    "in load command %lu has relocation entries"
 				    " but the cputype and cpusubtype for the "
@@ -3282,6 +3282,184 @@ enum bool dylib_only)
 		    s++;
 		}
 		break;
+	    case LC_SEGMENT_64:
+		sg64 = (struct segment_command_64 *)lc;
+		if(cur_obj->swapped)
+		    swap_segment_command_64(sg64, host_byte_sex);
+		if(sg64->cmdsize != sizeof(struct segment_command_64) +
+				     sg64->nsects * sizeof(struct section_64)){
+		    error_with_cur_obj("cmdsize field of load command %lu is "
+				       "inconsistant for a segment_command_64 "
+				       "with the number of sections it has", i);
+		    return;
+		}
+		if(sg64->flags == SG_FVMLIB){
+		    if(sg64->nsects != 0){
+			error_with_cur_obj("SG_FVMLIB segment %.16s contains "
+					   "sections and shouldn't",
+					   sg64->segname);
+			return;
+		    }
+		    cur_obj->fvmlib_stuff = TRUE;
+		    break;
+		}
+		check_size_offset(sg64->filesize, sg64->fileoff, sizeof(long),
+				  "filesize", "fileoff", i);
+		if(errors)
+		    return;
+		/*
+		 * Segments without sections are an error to see on input except
+		 * for the segments created by the link-editor (which are
+		 * recreated).
+		 */
+		if(sg64->nsects == 0){
+		    if(strcmp(sg64->segname, SEG_PAGEZERO) != 0 &&
+		       strcmp(sg64->segname, SEG_LINKEDIT) != 0){
+			error_with_cur_obj("segment %.16s contains no "
+					   "sections and can't be link-edited",
+					   sg64->segname);
+			return;
+		    }
+		}
+		else{
+		    /*
+		     * Doing a reallocate here is not bad beacuse in the
+		     * normal case this is an MH_OBJECT file type and has only
+		     * one segment.  So this only gets done once per object.
+		     */
+		    cur_obj->section_maps = reallocate(cur_obj->section_maps,
+					(cur_obj->nsection_maps + sg64->nsects) *
+					sizeof(struct section_map));
+		    memset(cur_obj->section_maps + cur_obj->nsection_maps, '\0',
+			   sg64->nsects * sizeof(struct section_map));
+		}
+		s64 = (struct section_64 *)
+		    ((char *)sg64 + sizeof(struct segment_command_64));
+		if(cur_obj->swapped)
+		    swap_section_64(s64, sg64->nsects, host_byte_sex);
+		for(j = 0 ; j < sg64->nsects ; j++){
+		    /*
+		     * NOTE: section_map stores pointer to section structure.
+		     * For 64-bit sections, we store the section_64 pointer
+		     * and the code must check cur_obj->is_64bit to know which
+		     * structure type to cast to.
+		     */
+		    cur_obj->section_maps[cur_obj->nsection_maps++].s =
+			(struct section *)s64;
+		    /* check to see that segment name in the section structure
+		       matches the one in the segment command if this is not in
+		       an MH_OBJECT filetype */
+		    if(filetype != MH_OBJECT &&
+		       strcmp(sg64->segname, s64->segname) != 0){
+			error_with_cur_obj("segment name %.16s of section %lu "
+				"(%.16s,%.16s) in load command %lu does not "
+				"match segment name %.16s", s64->segname, j,
+				s64->segname, s64->sectname, i, sg64->segname);
+			return;
+		    }
+		    /* check to see that flags (type) of this section is some
+		       thing the link-editor understands */
+		    section_type = s64->flags & SECTION_TYPE;
+		    if(section_type != S_REGULAR &&
+		       section_type != S_ZEROFILL &&
+		       section_type != S_CSTRING_LITERALS &&
+		       section_type != S_4BYTE_LITERALS &&
+		       section_type != S_8BYTE_LITERALS &&
+		       section_type != S_LITERAL_POINTERS &&
+		       section_type != S_NON_LAZY_SYMBOL_POINTERS &&
+		       section_type != S_LAZY_SYMBOL_POINTERS &&
+		       section_type != S_SYMBOL_STUBS &&
+		       section_type != S_MOD_INIT_FUNC_POINTERS &&
+		       section_type != S_MOD_TERM_FUNC_POINTERS){
+			error_with_cur_obj("unknown flags (type) of section %lu"
+					   " (%.16s,%.16s) in load command %lu",
+					   j, s64->segname, s64->sectname, i);
+			return;
+		    }
+		    if(dynamic == FALSE){
+			if(section_type == S_NON_LAZY_SYMBOL_POINTERS ||
+			   section_type == S_LAZY_SYMBOL_POINTERS ||
+			   section_type == S_SYMBOL_STUBS ||
+			   section_type == S_MOD_INIT_FUNC_POINTERS ||
+			   section_type == S_MOD_TERM_FUNC_POINTERS){
+			    error_with_cur_obj("incompatible, file contains "
+				"unsupported type of section %lu (%.16s,%.16s) "
+				"in load command %lu (must specify "
+				"\"-dynamic\" to be used)", j, s64->segname,
+				s64->sectname, i);
+			    return;
+			}
+		    }
+#ifdef SA_RLD
+		    if(section_type == S_NON_LAZY_SYMBOL_POINTERS ||
+		       section_type == S_LAZY_SYMBOL_POINTERS ||
+		       section_type == S_SYMBOL_STUBS ||
+		       section_type == S_MOD_INIT_FUNC_POINTERS ||
+		       section_type == S_MOD_TERM_FUNC_POINTERS){
+			error_with_cur_obj("unsupported type of section %lu "
+			   "(%.16s,%.16s) for sarld in load command %lu", j,
+			   s64->segname, s64->sectname, i);
+			return;
+		    }
+#endif /* SA_RLD */
+		    /* check to make sure the alignment is reasonable */
+		    if(s64->align > MAXSECTALIGN){
+			error_with_cur_obj("align (%lu) of section %lu "
+			    "(%.16s,%.16s) in load command %lu greater "
+			    "than maximum section alignment (%d)", s64->align,
+			     j, s64->segname, s64->sectname, i, MAXSECTALIGN);
+			return;
+		    }
+		    check_size_offset_sect(s64->size, s64->offset, sizeof(long),
+				      "size", "offset", i, j, s64->segname,
+				      s64->sectname);
+		    if(errors)
+			return;
+		    /* check the relocation entries if it can have them */
+		    if(section_type == S_ZEROFILL ||
+		       section_type == S_CSTRING_LITERALS ||
+		       section_type == S_4BYTE_LITERALS ||
+		       section_type == S_8BYTE_LITERALS ||
+		       section_type == S_NON_LAZY_SYMBOL_POINTERS){
+			if(s64->nreloc != 0){
+			    error_with_cur_obj("section %lu (%.16s,%.16s) in "
+				"load command %lu has relocation entries which "
+				"it shouldn't for its type (flags)", j,
+				 s64->segname, s64->sectname, i);
+			    return;
+			}
+		    }
+		    else{
+			if(s64->nreloc != 0){
+			    if(cputype == 0 && cpusubtype == 0){
+				error_with_cur_obj("section %lu (%.16s,%.16s)"
+				    "in load command %lu has relocation entries"
+				    " but the cputype and cpusubtype for the "
+				    "object are not set", j, s64->segname,
+				    s64->sectname, i);
+				return;
+			    }
+			}
+			else{
+			    check_size_offset_sect(s64->nreloc * sizeof(struct
+				 relocation_info), s64->reloff, sizeof(long),
+				 "nreloc * sizeof(struct relocation_info)",
+				 "reloff", i, j, s64->segname, s64->sectname);
+			    if(errors)
+				return;
+			}
+		    }
+		    if(section_type == S_SYMBOL_STUBS && s64->reserved2 == 0){
+			error_with_cur_obj("symbol stub section %lu "
+			    "(%.16s,%.16s) in load command %lu, sizeof stub in "
+			    "reserved2 field is zero", j, s64->segname,
+			    s64->sectname, i);
+			return;
+		    }
+		    s64++;
+		}
+		break;
+
 
 	    case LC_SYMTAB:
 		if(st != NULL){
