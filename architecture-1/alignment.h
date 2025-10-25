@@ -39,6 +39,8 @@
 #include "architecture/ppc/alignment.h"
 #elif defined (__i386__)
 #include "architecture/i386/alignment.h"
+#elif defined (__mmix__)
+#include "architecture/mmix/alignment.h"
 #else
 #error architecture not supported
 #endif
