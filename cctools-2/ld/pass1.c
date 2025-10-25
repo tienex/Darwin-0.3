@@ -3475,9 +3475,19 @@ enum bool dylib_only)
 				       "for LC_SYMTAB", i);
 		    return;
 		}
-		check_size_offset(st->nsyms * sizeof(struct nlist), st->symoff,
-				  sizeof(long), "nsyms * sizeof(struct nlist)",
-				  "symoff", i);
+		/* For 64-bit objects, symbol table uses nlist_64 */
+		if(cur_obj->is_64bit){
+		    check_size_offset(st->nsyms * sizeof(struct nlist_64),
+				      st->symoff, sizeof(long),
+				      "nsyms * sizeof(struct nlist_64)",
+				      "symoff", i);
+		}
+		else{
+		    check_size_offset(st->nsyms * sizeof(struct nlist),
+				      st->symoff, sizeof(long),
+				      "nsyms * sizeof(struct nlist)",
+				      "symoff", i);
+		}
 		if(errors)
 		    return;
 		check_size_offset(st->strsize, st->stroff, sizeof(long),
