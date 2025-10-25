@@ -45,6 +45,7 @@
 #include <mach-o/ppc/reloc.h>
 #include <mach-o/hppa/reloc.h>
 #include <mach-o/sparc/reloc.h>
+#include <mach-o/mmix/reloc.h>
 #include "stuff/ofile.h"
 #include "stuff/allocate.h"
 #include "stuff/errors.h"

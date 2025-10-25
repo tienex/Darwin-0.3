@@ -41,6 +41,7 @@
 #include "ppc_disasm.h"
 #include "hppa_disasm.h"
 #include "sparc_disasm.h"
+#include "mmix_disasm.h"
 
 /* Name of this program for error messages (argv[0]) */
 char *progname = NULL;
