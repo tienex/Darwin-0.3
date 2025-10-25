@@ -132,6 +132,7 @@ extern vm_offset_t		interrupt_stack[];
 /* skip	CPU_TYPE_ALPHA		((cpu_type_t) 16)	*/
 /* skip				((cpu_type_t) 17)	*/
 #define CPU_TYPE_POWERPC		((cpu_type_t) 18)
+#define CPU_TYPE_MMIX			((cpu_type_t) 19)
 
 
 /*
@@ -276,5 +277,10 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_SUBTYPE_POWERPC_604e	((cpu_subtype_t) 7)
 #define CPU_SUBTYPE_POWERPC_620		((cpu_subtype_t) 8)
 #define CPU_SUBTYPE_POWERPC_750		((cpu_subtype_t) 9)
+
+/*
+ *	MMIX subtypes
+ */
+#define CPU_SUBTYPE_MMIX_ALL		((cpu_subtype_t) 0)
 
 #endif	/* _MACH_MACHINE_H_ */

@@ -105,6 +105,8 @@ static const NXArchInfo ArchInfoTable[] = {
 	 "PowerPC 604e" },
     {"ppc750", CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_750,  NX_BigEndian,
 	 "PowerPC 750" },
+    {"mmix",   CPU_TYPE_MMIX,    CPU_SUBTYPE_MMIX_ALL,     NX_BigEndian,
+	 "MMIX"},
     {"little", CPU_TYPE_ANY,     CPU_SUBTYPE_LITTLE_ENDIAN, NX_LittleEndian,
          "Little Endian"},
     {"big",    CPU_TYPE_ANY,     CPU_SUBTYPE_BIG_ENDIAN,   NX_BigEndian,
