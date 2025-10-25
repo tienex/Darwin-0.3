@@ -24,8 +24,8 @@
 
 /*
  * DLX Physical Map (PMAP) - MMU Support
- * Supports both Page Tables and Software-Managed TLB
- * Based on ETH DLXSIM architecture
+ * Software-Managed TLB (similar to MIPS R2000/R3000)
+ * Based on standard DLX architecture for OS support
  */
 
 #ifndef	_DLX_PMAP_H_
