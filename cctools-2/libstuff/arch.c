@@ -48,6 +48,7 @@ static const struct arch_flag arch_flags[] = {
     { "sparc",	CPU_TYPE_SPARC,   CPU_SUBTYPE_SPARC_ALL },
     { "m88k",   CPU_TYPE_MC88000, CPU_SUBTYPE_MC88000_ALL },
     { "i860",   CPU_TYPE_I860,    CPU_SUBTYPE_I860_ALL },
+    { "loongarch", CPU_TYPE_LOONGARCH, CPU_SUBTYPE_LOONGARCH_ALL },
     /* specific architecture implementations */
     { "ppc601", CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_601 },
     { "ppc603", CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_603 },
@@ -66,6 +67,8 @@ static const struct arch_flag arch_flags[] = {
     { "m68030", CPU_TYPE_MC680x0, CPU_SUBTYPE_MC68030_ONLY },
     { "m68040", CPU_TYPE_MC680x0, CPU_SUBTYPE_MC68040 },
     { "hppa7100LC", CPU_TYPE_HPPA,  CPU_SUBTYPE_HPPA_7100LC },
+    { "loongarch32", CPU_TYPE_LOONGARCH, CPU_SUBTYPE_LOONGARCH32 },
+    { "loongarch64", CPU_TYPE_LOONGARCH, CPU_SUBTYPE_LOONGARCH64 },
     { NULL,	0,		  0 }
 };
 
@@ -374,6 +377,48 @@ struct arch_flag *specific_arch_flag)
 		}
 		if(specific_arch_flag != NULL)
 		    specific_arch_flag->name = "sparc";
+		return(1);
+	    }
+	    break;
+	case CPU_TYPE_LOONGARCH:
+	    switch(host_basic_info.cpu_subtype){
+	    case CPU_SUBTYPE_LOONGARCH_ALL:
+		if(family_arch_flag != NULL){
+		    family_arch_flag->name = "loongarch";
+		    family_arch_flag->cpusubtype = CPU_SUBTYPE_LOONGARCH_ALL;
+		}
+		if(specific_arch_flag != NULL)
+		    specific_arch_flag->name = "loongarch";
+		return(1);
+	    case CPU_SUBTYPE_LOONGARCH32:
+		if(family_arch_flag != NULL){
+		    family_arch_flag->name = "loongarch";
+		    family_arch_flag->cpusubtype = CPU_SUBTYPE_LOONGARCH_ALL;
+		}
+		if(specific_arch_flag != NULL)
+		    specific_arch_flag->name = "loongarch32";
+		return(1);
+	    case CPU_SUBTYPE_LOONGARCH64:
+		if(family_arch_flag != NULL){
+		    family_arch_flag->name = "loongarch";
+		    family_arch_flag->cpusubtype = CPU_SUBTYPE_LOONGARCH_ALL;
+		}
+		if(specific_arch_flag != NULL)
+		    specific_arch_flag->name = "loongarch64";
+		return(1);
+	    default:
+		if(family_arch_flag != NULL){
+		    family_arch_flag->name = "loongarch";
+		    family_arch_flag->cpusubtype = CPU_SUBTYPE_LOONGARCH_ALL;
+		}
+		if(specific_arch_flag != NULL){
+		    specific_arch_flag->name =
+			malloc(sizeof("LoongArch cpusubtype ") + 10);
+		    if(specific_arch_flag->name != NULL)
+			sprintf(specific_arch_flag->name,
+				"LoongArch cpusubtype %u",
+				host_basic_info.cpu_subtype);
+		}
 		return(1);
 	    }
 	    break;

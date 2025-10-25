@@ -258,6 +258,27 @@ unsigned long nfat_archs)
 		    return(fat_archs + i);
 	    }
 	    break;
+	case CPU_TYPE_LOONGARCH:
+	    /*
+	     * An exact match was not found.  For LoongArch subtypes, try to
+	     * find a matching bit-width (32 vs 64), otherwise fall back to ALL.
+	     */
+	    if(cpusubtype == CPU_SUBTYPE_LOONGARCH32 ||
+	       cpusubtype == CPU_SUBTYPE_LOONGARCH64){
+		for(i = 0; i < nfat_archs; i++){
+		    if(fat_archs[i].cputype != cputype)
+			continue;
+		    if(fat_archs[i].cpusubtype == cpusubtype)
+			return(fat_archs + i);
+		}
+	    }
+	    for(i = 0; i < nfat_archs; i++){
+		if(fat_archs[i].cputype != cputype)
+		    continue;
+		if(fat_archs[i].cpusubtype == CPU_SUBTYPE_LOONGARCH_ALL)
+		    return(fat_archs + i);
+	    }
+	    break;
 	default:
 	    return(NULL);
 	}
@@ -422,6 +443,27 @@ cpu_subtype_t cpusubtype2)
 			return((cpu_subtype_t)-1);
 	    if(cpusubtype2 != CPU_SUBTYPE_SPARC_ALL)
 			return((cpu_subtype_t)-1);
+	    break; /* logically can't get here */
+
+	case CPU_TYPE_LOONGARCH:
+	    /*
+	     * Combining with the ALL type becomes the other type.
+	     * LoongArch32 and LoongArch64 cannot be combined (mutually exclusive).
+	     * All other non-exact matches combine to the ALL type.
+	     */
+	    if(cpusubtype1 == CPU_SUBTYPE_LOONGARCH_ALL)
+		return(cpusubtype2);
+	    if(cpusubtype2 == CPU_SUBTYPE_LOONGARCH_ALL)
+		return(cpusubtype1);
+
+	    /* Cannot combine 32-bit and 64-bit */
+	    if((cpusubtype1 == CPU_SUBTYPE_LOONGARCH32 &&
+	        cpusubtype2 == CPU_SUBTYPE_LOONGARCH64) ||
+	       (cpusubtype1 == CPU_SUBTYPE_LOONGARCH64 &&
+	        cpusubtype2 == CPU_SUBTYPE_LOONGARCH32))
+		return((cpu_subtype_t)-1);
+
+	    return(CPU_SUBTYPE_LOONGARCH_ALL);
 	    break; /* logically can't get here */
 
 	default:
