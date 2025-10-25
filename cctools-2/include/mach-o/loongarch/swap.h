@@ -22,3 +22,21 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 #import <architecture/byte_order.h>
+#import <mach/loongarch/thread_status.h>
+
+extern void swap_loongarch_thread_state_t(
+    loongarch_thread_state_t *cpu,
+    enum NXByteOrder target_byte_sex);
+
+extern void swap_loongarch64_thread_state_t(
+    loongarch64_thread_state_t *cpu,
+    enum NXByteOrder target_byte_sex);
+
+extern void swap_loongarch_float_state_t(
+    loongarch_float_state_t *fpu,
+    enum NXByteOrder target_byte_sex);
+
+extern void swap_loongarch_exception_state_t(
+    loongarch_exception_state_t *state,
+    enum NXByteOrder target_byte_sex);
+
