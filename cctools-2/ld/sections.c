@@ -2824,7 +2824,8 @@ unsigned long *nextrel)
 		    if(arch_flag.cputype == CPU_TYPE_MC680x0)
 			generic_reloc(fake_contents, fake_relocs, &fake_map,
 				      FALSE);
-		    else if(arch_flag.cputype == CPU_TYPE_I386)
+		    else if(arch_flag.cputype == CPU_TYPE_I386 ||
+			    arch_flag.cputype == CPU_TYPE_VAX)
 			generic_reloc(fake_contents, fake_relocs, &fake_map,
 				      TRUE);
 		    else if(arch_flag.cputype == CPU_TYPE_POWERPC)
@@ -3138,7 +3139,8 @@ struct section_map *map)
 	 */
 	if(arch_flag.cputype == CPU_TYPE_MC680x0)
 	    generic_reloc(contents, relocs, map, FALSE);
-	else if(arch_flag.cputype == CPU_TYPE_I386)
+	else if(arch_flag.cputype == CPU_TYPE_I386 ||
+		arch_flag.cputype == CPU_TYPE_VAX)
 	    generic_reloc(contents, relocs, map, TRUE);
 	else if(arch_flag.cputype == CPU_TYPE_POWERPC)
 	    ppc_reloc(contents, relocs, map);
