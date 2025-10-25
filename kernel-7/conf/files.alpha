@@ -48,6 +48,15 @@ machdep/alpha/bcopy.s		standard
 machdep/alpha/bzero.s		standard
 machdep/alpha/fpu.c		standard
 
+# Cache management
+machdep/alpha/cache.c		standard
+
+# Debugging support
+machdep/alpha/debug.c		standard
+
+# Assembly constant generation
+machdep/alpha/genassym.c	standard
+
 # BSD Alpha-specific files
 bsd/dev/alpha/conf.c		standard
 bsd/dev/alpha/cons.c		standard

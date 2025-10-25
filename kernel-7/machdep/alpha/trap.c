@@ -21,18 +21,76 @@ alpha_exception_handler(alpha_saved_state_t *state)
 {
 	unsigned long exc_type;
 	unsigned long exc_addr;
+	unsigned long exc_summary;
 
 	/*
-	 * Determine exception type
-	 * This would normally come from PALcode-specific registers
+	 * Determine exception type from PALcode
+	 * Exception information is passed in specific registers
+	 * depending on PALcode variant
 	 */
 
 	/*
-	 * Handle common exception types
+	 * For UNIX PALcode, exception type is in a0 at entry
+	 * Exception address is typically in the PC or a special register
 	 */
+	exc_type = state->a0;  /* Exception type from PALcode */
+	exc_addr = state->pc;  /* Faulting address */
 
-	/* For now, panic on any exception during development */
-	panic("alpha_exception_handler: exception at PC=0x%lx", state->pc);
+	/*
+	 * Handle specific exception types
+	 */
+	switch (exc_type) {
+	case PAL_EXC_MCHK:
+		/* Machine check */
+		alpha_machine_check(state);
+		break;
+
+	case PAL_EXC_ARITH:
+		/* Arithmetic exception (FP or integer overflow) */
+		printf("Arithmetic exception at PC=0x%lx\n", state->pc);
+		/* Handle FP exceptions or send signal to process */
+		break;
+
+	case PAL_EXC_INTERRUPT:
+		/* Should not get here - interrupts have separate handler */
+		alpha_interrupt_handler(state);
+		break;
+
+	case PAL_EXC_DFAULT:
+		/* Data memory management fault */
+		alpha_page_fault(state, exc_addr, VM_PROT_READ | VM_PROT_WRITE);
+		break;
+
+	case PAL_EXC_IFAULT:
+		/* Instruction memory management fault */
+		alpha_page_fault(state, exc_addr, VM_PROT_READ | VM_PROT_EXECUTE);
+		break;
+
+	case PAL_EXC_UNALIGNED:
+		/* Unaligned access */
+		alpha_alignment_fault(state, exc_addr);
+		break;
+
+	case PAL_EXC_OPCDEC:
+		/* Reserved opcode */
+		printf("Reserved opcode at PC=0x%lx\n", state->pc);
+		panic("Illegal instruction");
+		break;
+
+	case PAL_EXC_FEN:
+		/* Floating-point disabled */
+		printf("FP disabled exception at PC=0x%lx\n", state->pc);
+		/* Enable FP for this thread */
+		extern void pal_unix_wrfen(unsigned long);
+		pal_unix_wrfen(1);
+		break;
+
+	default:
+		/* Unknown exception type */
+		printf("Unknown exception %ld at PC=0x%lx\n", exc_type, state->pc);
+		panic("Unhandled exception");
+		break;
+	}
 }
 
 /*

@@ -1,0 +1,126 @@
+##
+# Copyright (c) 2000 Apple Computer, Inc. All rights reserved.
+#
+# @APPLE_LICENSE_HEADER_START@
+#
+# Portions Copyright (c) 2000 Apple Computer, Inc.  All Rights
+# Reserved.  This file contains Original Code and/or Modifications of
+# Original Code as defined in and that are subject to the Apple Public
+# Source License Version 1.1 (the "License").  You may not use this file
+# except in compliance with the License.  Please obtain a copy of the
+# License at http://www.apple.com/publicsource and read it before using
+# this file.
+#
+# The Original Code and all software distributed under the License are
+# distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+# EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+# INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE OR NON- INFRINGEMENT.  Please see the
+# License for the specific language governing rights and limitations
+# under the License.
+#
+# @APPLE_LICENSE_HEADER_END@
+##
+
+#
+# Mach Operating System
+# Copyright (c) 1986 Carnegie-Mellon University
+# All rights reserved.  The CMU software License Agreement
+# specifies the terms and conditions for use and redistribution.
+#
+######################################################################
+
+######################################################################
+#BEGIN	Machine dependent Makefile fragment for Alpha
+######################################################################
+
+ifneq "" "$(wildcard /bin/mkdirs)"
+  MKDIRS = /bin/mkdirs
+else
+  MKDIRS = /bin/mkdir -p
+endif
+
+#
+#  Compilation components
+#
+CC=	cc
+LD=	ld
+AS=	as
+
+KCC=cc -static -nostdinc -nostdlib -traditional-cpp
+
+MACHINE_INCLUDES=
+MACHINE_CFLAGS= -arch alpha -I$(SOURCE_DIR)/bsd/include \
+	-fwritable-strings -fno-common -fpascal-strings \
+	-mno-fp-regs -mcpu=ev5 -Wa,-mev6
+MACHINE_SFLAGS= -arch alpha -D__ASSEMBLER__
+LDFLAGS=-e start \
+	-segaddr __TEXT ${RELOC} \
+	-segaddr __LINKEDIT ${SYMADDR} \
+	-segalign 0x2000 \
+	-force_cpusubtype_ALL
+
+MACHINE=alpha
+
+LIBS_P= -lcc
+LIBS= -lcc
+
+PRELDDEPS=assym.h
+
+LDOBJS_PREFIX= $(LIBC_OBJ) $(LIBC_UNROLL_OBJ)
+LDOBJS_SUFFIX= $(LIBDRIVER_SOURCE)/$(LIBDRIVER) $(LIBOBJC_SOURCE)/$(LIBOBJC)
+
+LDDEPS_PREFIX=
+SWAPDEPS_PREFIX=
+
+OBJSDEPS=
+
+FEATURES_EXTRA=
+
+#
+# Alpha C library routines
+#
+LIBC_SRC=	memchr.c memcmp.c memcpy.c memmove.c memset.c pagesize.c
+LIBC_OBJ=	$(LIBC_SRC:.c=.o)
+
+$(LIBC_OBJ):
+	${KCC} $(COPTS) $(MACHINE_CFLAGS) -c -O2 $(MACHINEDIR)/libc/$*.c
+
+LIBC_UNROLL_SRC=	strchr.c strrchr.c strlen.c \
+			strcpy.c strncpy.c strcat.c strncat.c \
+			strcmp.c strncmp.c index.c ffs.c
+LIBC_UNROLL_OBJ=	$(LIBC_UNROLL_SRC:.c=.o)
+
+$(LIBC_UNROLL_OBJ):
+	${KCC} $(COPTS) $(MACHINE_CFLAGS) -c -O2 -funroll-all-loops \
+							$(MACHINEDIR)/libc/$*.c
+
+
+MACHINE_INSTALL=
+
+#
+# Install machine headers.
+#
+MACHINE_COMPATHDRS=
+MACHINE_INSTALLHDRS= alpha_installhdrs
+
+alpha_installhdrs:
+	${MKDIRS} $(DSTROOT)/System/Library/Frameworks/Kernel.framework/Versions/A/Headers/mach/alpha
+	${MKDIRS} $(DSTROOT)/System/Library/Frameworks/Kernel.framework/Versions/A/PrivateHeaders/architecture/alpha
+	${MKDIRS} $(DSTROOT)/System/Library/Frameworks/Kernel.framework/Versions/A/PrivateHeaders/machdep/alpha
+	install -c -m 444 $(SOURCE_DIR)/mach/alpha/*.h \
+		$(DSTROOT)/System/Library/Frameworks/Kernel.framework/Versions/A/Headers/mach/alpha
+	install -c -m 444 $(SOURCE_DIR)/../architecture-1/alpha/*.h \
+		$(DSTROOT)/System/Library/Frameworks/Kernel.framework/Versions/A/PrivateHeaders/architecture/alpha
+
+#
+# Generate assym.h for assembly files
+#
+assym.h: $(SOURCE_DIR)/machdep/alpha/genassym.c
+	${KCC} $(COPTS) $(MACHINE_CFLAGS) -S -o assym.s $(SOURCE_DIR)/machdep/alpha/genassym.c
+	sed -n -e '/^[[:space:]]*\.ascii[[:space:]]*"@/s/^.*"@\([^@]*\)@.*"$$/\1/p' < assym.s > assym.h
+	rm -f assym.s
+
+######################################################################
+#END	Machine dependent Makefile fragment for Alpha
+######################################################################
