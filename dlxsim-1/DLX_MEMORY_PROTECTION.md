@@ -832,7 +832,683 @@ void *mmap_hugepage(void *addr, size_t length, int prot, int flags) {
 }
 ```
 
-## 5. Configuration and Control
+## 5. Dual Page Tables for 4GB/4GB Split
+
+### Motivation
+
+On 32-bit systems, the address space is typically split between user and kernel (e.g., 3GB/1GB on x86-32). This limits either user processes (< 3GB) or kernel (< 1GB). **Dual page tables** allow a 4GB/4GB split: each user process gets a full 4GB address space, and the kernel has its own separate 4GB space.
+
+This is inspired by the Linux x86 4G/4G patch and eliminates the need for continuous TLB flushing on kernel entry/exit.
+
+### Dual Page Table Configuration
+
+```c
+/* CP0 Register: Dual Page Table Configuration (CP0 reg 5, sel 3) */
+typedef struct {
+    uint32_t enable:1;          /* Bit 0: Enable dual page tables */
+    uint32_t auto_switch:1;     /* Bit 1: Auto-switch on privilege change */
+    uint32_t current_table:1;   /* Bit 2: Current active table (0=user, 1=kernel) */
+    uint32_t tlb_mode:2;        /* Bits 3-4: TLB handling mode */
+#define TLB_MODE_SEPARATE       0   /* Separate TLBs (no flush) */
+#define TLB_MODE_TAGGED         1   /* Tagged TLB (ASID-like) */
+#define TLB_MODE_FLUSH          2   /* Flush on switch */
+#define TLB_MODE_LAZY           3   /* Lazy flush */
+
+    uint32_t reserved:27;
+} dlx_dual_pgtable_config_t;
+```
+
+### Page Table Base Registers
+
+```c
+/* Two separate page table base registers */
+
+/* CP0 Register: User Page Table Base (CP0 reg 2, sel 0) - existing */
+/* This becomes the user-mode page table base */
+uint32_t user_pgtable_base;     /* User mode page directory */
+
+/* CP0 Register: Kernel Page Table Base (CP0 reg 2, sel 1) - NEW */
+/* This is the kernel-mode page table base */
+uint32_t kernel_pgtable_base;   /* Kernel mode page directory */
+
+/* CP0 Register: Current Page Table Base (CP0 reg 2, sel 2) - Read-only */
+/* Returns the currently active page table base */
+uint32_t current_pgtable_base;  /* Active page table (auto-selected) */
+```
+
+### Address Space Layout
+
+```
+User Mode (4GB address space):
+0x00000000 - 0xFFFFFFFF    User process virtual memory
+                          (uses user_pgtable_base)
+
+Kernel Mode (separate 4GB address space):
+0x00000000 - 0x7FFFFFFF    Kernel direct-mapped memory
+0x80000000 - 0xBFFFFFFF    Kernel vmalloc area
+0xC0000000 - 0xFFFFFFFF    Kernel modules, device mappings
+                          (uses kernel_pgtable_base)
+
+No overlap - completely separate address spaces!
+```
+
+### Automatic Page Table Switching
+
+```c
+/* Hardware automatically switches page tables on privilege change */
+
+void handle_syscall(void) {
+    /* On syscall entry (user → kernel):
+     * 1. Save current_pgtable_base → user_pgtable_base (implicit)
+     * 2. current_pgtable_base = kernel_pgtable_base
+     * 3. If TLB_MODE_SEPARATE: no TLB flush needed!
+     * 4. If TLB_MODE_FLUSH: flush TLB
+     */
+
+    /* Kernel code executes with kernel page tables */
+    do_syscall();
+
+    /* On return (kernel → user):
+     * 1. current_pgtable_base = user_pgtable_base
+     * 2. Return to user space
+     */
+}
+```
+
+### TLB Handling Modes
+
+#### Mode 0: Separate TLBs
+
+```c
+/* Separate TLB entries for user and kernel */
+/* No flush needed on context switch */
+
+typedef struct {
+    uint32_t vpn;
+    uint32_t pfn:20;
+    uint32_t mode:1;        /* 0=user, 1=kernel */
+    uint32_t valid:1;
+    uint32_t writable:1;
+    uint32_t user:1;
+    /* ... */
+} tlb_entry_dual_t;
+
+/* TLB lookup considers current mode */
+tlb_entry_dual_t *tlb_lookup_dual(uint32_t va) {
+    int current_mode = (status & STATUS_KUC) ? 0 : 1;
+
+    for (int i = 0; i < TLB_ENTRIES; i++) {
+        if (tlb[i].valid &&
+            tlb[i].vpn == (va >> 12) &&
+            tlb[i].mode == current_mode) {
+            return &tlb[i];
+        }
+    }
+
+    return NULL;  /* TLB miss */
+}
+```
+
+#### Mode 1: Tagged TLB (ASID-like)
+
+```c
+/* Use ASID to distinguish user/kernel entries */
+/* ASID 0 = kernel, ASID 1-255 = user processes */
+
+#define KERNEL_ASID  0
+
+/* On privilege change, update EntryHi ASID */
+void switch_to_kernel(void) {
+    uint32_t entryhi;
+    asm("mfc0 %0, $ENTRYHI" : "=r"(entryhi));
+    entryhi = (entryhi & ~0xFF) | KERNEL_ASID;
+    asm("mtc0 %0, $ENTRYHI" :: "r"(entryhi));
+
+    /* TLB entries with ASID=0 (kernel) now match */
+}
+```
+
+### Page Table Walk with Dual Tables
+
+```c
+uint64_t translate_dual_pgtable(uint32_t va, int access_type) {
+    uint32_t *pgtable_base;
+    int is_kernel_mode = !(status & STATUS_KUC);
+
+    /* Select page table based on current mode */
+    if (is_kernel_mode) {
+        pgtable_base = (uint32_t *)kernel_pgtable_base;
+    } else {
+        pgtable_base = (uint32_t *)user_pgtable_base;
+    }
+
+    /* Walk selected page table */
+    uint32_t pde_index = (va >> 22) & 0x3FF;
+    uint32_t pte_index = (va >> 12) & 0x3FF;
+
+    uint32_t *pde = &pgtable_base[pde_index];
+    if (!(*pde & PTE_PRESENT))
+        return page_fault(va, access_type);
+
+    uint32_t *pte_table = (uint32_t *)(*pde & ~0xFFF);
+    uint32_t *pte = &pte_table[pte_index];
+
+    if (!(*pte & PTE_PRESENT))
+        return page_fault(va, access_type);
+
+    /* Check permissions */
+    if (access_type == ACCESS_WRITE && !(*pte & PTE_WRITABLE))
+        return page_fault(va, ACCESS_WRITE);
+
+    /* Return physical address */
+    return (*pte & ~0xFFF) | (va & 0xFFF);
+}
+```
+
+### Benefits of Dual Page Tables
+
+```c
+/* Performance improvements */
+
+// 1. No TLB flush on syscall/return
+//    Before: ~100-200 cycles per syscall
+//    After: ~10-20 cycles
+
+// 2. Full 4GB user address space
+//    User processes can use entire 32-bit address space
+
+// 3. Full 4GB kernel address space
+//    Kernel not limited to 1GB
+
+// 4. Better cache utilization
+//    TLB entries remain valid across privilege transitions
+
+/* Example: Syscall overhead reduction */
+void benchmark_syscall() {
+    // Without dual page tables:
+    // - TLB flush: ~150 cycles
+    // - Refill TLB on return: ~50 cycles
+    // Total overhead: ~200 cycles
+
+    // With dual page tables (TLB_MODE_SEPARATE):
+    // - Page table switch: ~5 cycles
+    // - No TLB flush needed
+    // Total overhead: ~5 cycles
+
+    // **40x speedup!**
+}
+```
+
+### Kernel Direct Mapping
+
+```c
+/* Kernel page table setup for direct-mapped region */
+void setup_kernel_pgtable(void) {
+    uint32_t *kernel_pgd = allocate_pgd();
+
+    /* Direct-map first 2GB of physical memory to kernel VA 0-2GB */
+    for (uint64_t pa = 0; pa < 0x80000000; pa += PAGE_SIZE_4MB) {
+        uint32_t va = pa;  /* Identity mapping */
+        map_kernel_page_4mb(kernel_pgd, va, pa,
+                           PTE_PRESENT | PTE_WRITABLE | PTE_KERNEL);
+    }
+
+    /* Set kernel page table base */
+    asm("mtc0 %0, $PGTABLE, 1" :: "r"(kernel_pgd));
+
+    /* Enable dual page tables */
+    uint32_t config;
+    asm("mfc0 %0, $PGTABLE, 3" : "=r"(config));
+    config |= (1 << 0) | (1 << 1);  /* enable | auto_switch */
+    config |= (TLB_MODE_SEPARATE << 3);
+    asm("mtc0 %0, $PGTABLE, 3" :: "r"(config));
+}
+```
+
+### User-Kernel Data Sharing
+
+```c
+/* Special handling for shared data between user and kernel */
+
+/* Option 1: Duplicate mappings */
+void map_shared_region(void *kernel_va, void *user_va, uint64_t pa, size_t size) {
+    /* Map in kernel page table */
+    map_pages(kernel_pgtable_base, kernel_va, pa, size, KERNEL_FLAGS);
+
+    /* Map same physical pages in user page table */
+    map_pages(user_pgtable_base, user_va, pa, size, USER_FLAGS);
+}
+
+/* Option 2: Temporary mapping */
+void *kernel_access_user_memory(void *user_va, size_t len) {
+    /* Temporarily map user pages into kernel address space */
+    uint64_t pa = translate_user_va(user_va);
+    void *kernel_va = alloc_kernel_va(len);
+
+    map_pages(kernel_pgtable_base, kernel_va, pa, len, KERNEL_FLAGS);
+    return kernel_va;
+}
+```
+
+### Context Switch with Dual Page Tables
+
+```c
+void context_switch(task_t *prev, task_t *next) {
+    /* Save previous user page table base */
+    prev->pgtable_base = user_pgtable_base;
+
+    /* Load next user page table base */
+    user_pgtable_base = next->pgtable_base;
+    asm("mtc0 %0, $PGTABLE, 0" :: "r"(next->pgtable_base));
+
+    /* Kernel page table remains the same! */
+    /* No need to modify kernel_pgtable_base */
+
+    /* TLB handling depends on mode */
+    if (tlb_mode == TLB_MODE_FLUSH) {
+        flush_tlb_user();  /* Flush only user TLB entries */
+        /* Kernel TLB entries remain */
+    } else if (tlb_mode == TLB_MODE_TAGGED) {
+        /* Update ASID */
+        set_asid(next->asid);
+    }
+    /* TLB_MODE_SEPARATE: no action needed */
+}
+```
+
+### Copy-on-Write with Dual Tables
+
+```c
+/* COW is easier with dual page tables */
+void handle_cow_fault(uint32_t va) {
+    uint32_t *pte;
+
+    /* Get PTE from correct page table */
+    if (is_kernel_mode())
+        pte = get_pte(kernel_pgtable_base, va);
+    else
+        pte = get_pte(user_pgtable_base, va);
+
+    if (*pte & PTE_COW) {
+        /* Allocate new page */
+        uint64_t new_pa = alloc_page();
+
+        /* Copy old page to new page */
+        uint64_t old_pa = *pte & ~0xFFF;
+        memcpy((void *)new_pa, (void *)old_pa, PAGE_SIZE);
+
+        /* Update PTE */
+        *pte = new_pa | PTE_PRESENT | PTE_WRITABLE;
+        *pte &= ~PTE_COW;
+
+        /* Flush TLB entry for this VA */
+        flush_tlb_entry(va);
+    }
+}
+```
+
+### Compatibility Mode
+
+```c
+/* Disable dual page tables for compatibility */
+void disable_dual_pgtables(void) {
+    uint32_t config;
+
+    /* Disable dual page table mode */
+    asm("mfc0 %0, $PGTABLE, 3" : "=r"(config));
+    config &= ~1;  /* Clear enable bit */
+    asm("mtc0 %0, $PGTABLE, 3" :: "r"(config));
+
+    /* Revert to traditional 3GB/1GB split */
+    /* Single page table base (CP0 $2, sel 0) */
+}
+```
+
+### Summary
+
+**Dual Page Table Benefits:**
+- ✓ Full 4GB user address space (not 3GB)
+- ✓ Full 4GB kernel address space (not 1GB)
+- ✓ No TLB flush on syscall/return (huge performance win)
+- ✓ Better TLB utilization
+- ✓ Simpler kernel memory management
+- ✓ Compatible with register banking
+
+**Trade-offs:**
+- ✗ Slightly more complex page table management
+- ✗ Requires additional CP0 register (kernel_pgtable_base)
+- ✗ Potential memory overhead (two sets of page tables)
+
+**Use Cases:**
+- 32-bit systems needing > 3GB per process
+- High-frequency syscall workloads
+- Database servers
+- Java VMs (large heap)
+- Scientific computing
+
+### Alternate Page Table Load/Store Instructions
+
+DLX provides specialized load/store instructions that explicitly access memory using alternate page table contexts. When combined with 4-ring protection, this becomes four separate page table registers.
+
+#### Base Instructions (Dual Page Tables)
+
+```assembly
+# Load from alternate page table
+LDALT   rd, (rs)            # Load word using alternate page table
+LHALT   rd, (rs)            # Load halfword using alternate page table
+LBALT   rd, (rs)            # Load byte using alternate page table
+
+# Store to alternate page table
+STALT   rt, (rs)            # Store word using alternate page table
+SHALT   rt, (rs)            # Store halfword using alternate page table
+SBALT   rt, (rs)            # Store byte using alternate page table
+
+# If current mode is kernel: uses user_pgtable_base
+# If current mode is user: uses kernel_pgtable_base
+```
+
+#### Example: Kernel accessing user memory
+
+```c
+/* Safe kernel access to user memory */
+int copy_from_user(void *kernel_dst, const void *user_src, size_t len) {
+    uint8_t *kdst = kernel_dst;
+    const uint8_t *usrc = user_src;
+
+    /* Verify user pointer is valid */
+    if (!access_ok(VERIFY_READ, user_src, len))
+        return -EFAULT;
+
+    /* Use LDALT to load from user space using user page table */
+    for (size_t i = 0; i < len; i++) {
+        asm volatile("ldalt %0, (%1)"
+                    : "=r"(kdst[i])
+                    : "r"(&usrc[i]));
+    }
+
+    return 0;
+}
+
+int copy_to_user(void *user_dst, const void *kernel_src, size_t len) {
+    uint8_t *udst = user_dst;
+    const uint8_t *ksrc = kernel_src;
+
+    if (!access_ok(VERIFY_WRITE, user_dst, len))
+        return -EFAULT;
+
+    /* Use STALT to store to user space using user page table */
+    for (size_t i = 0; i < len; i++) {
+        asm volatile("stalt %0, (%1)"
+                    :: "r"(ksrc[i]), "r"(&udst[i]));
+    }
+
+    return 0;
+}
+```
+
+#### Four-Ring Extended Mode
+
+When 4-ring protection is enabled, the alternate load/store instructions can access any of the four ring page tables:
+
+```assembly
+# Extended format with ring selector
+LDRING  rd, (rs), ring      # Load from specified ring's page table
+STORING rt, (rs), ring      # Store to specified ring's page table
+
+# ring: 0-3 (Ring 0 = kernel, Ring 3 = user)
+
+# Examples:
+LDRING  r1, (r2), 0         # Load using Ring 0 (kernel) page table
+LDRING  r3, (r4), 3         # Load using Ring 3 (user) page table
+STORING r5, (r6), 1         # Store using Ring 1 (driver) page table
+```
+
+#### Page Table Registers (4-Ring Mode)
+
+```c
+/* CP0 Page Table Base Registers (when 4-ring enabled) */
+
+/* CP0 reg 2, sel 0: Ring 0 (Kernel) Page Table */
+uint32_t ring0_pgtable_base;
+
+/* CP0 reg 2, sel 1: Ring 1 (Driver) Page Table */
+uint32_t ring1_pgtable_base;
+
+/* CP0 reg 2, sel 2: Ring 2 (Service) Page Table */
+uint32_t ring2_pgtable_base;
+
+/* CP0 reg 2, sel 3: Ring 3 (User) Page Table */
+uint32_t ring3_pgtable_base;
+
+/* CP0 reg 2, sel 4: Current Page Table Base (read-only) */
+/* Returns the active page table for current ring */
+uint32_t current_pgtable_base;
+```
+
+#### Automatic Page Table Selection
+
+```c
+/* Hardware selects page table based on current ring */
+uint32_t *get_current_pgtable(void) {
+    uint32_t ring_config;
+    asm("mfc0 %0, $RING, 0" : "=r"(ring_config));
+
+    int current_ring = (ring_config >> 1) & 0x3;
+
+    switch (current_ring) {
+    case RING_0_KERNEL:  return (uint32_t *)ring0_pgtable_base;
+    case RING_1_DRIVER:  return (uint32_t *)ring1_pgtable_base;
+    case RING_2_SERVICE: return (uint32_t *)ring2_pgtable_base;
+    case RING_3_USER:    return (uint32_t *)ring3_pgtable_base;
+    }
+}
+```
+
+#### Cross-Ring Memory Access
+
+```c
+/* Driver (Ring 1) accessing kernel (Ring 0) memory */
+void driver_call_kernel(void *kernel_func, void *args) {
+    /* Ring 1 code */
+
+    /* Read kernel function pointer using Ring 0 page table */
+    void *func_ptr;
+    asm volatile("ldring %0, (%1), 0"  /* ring 0 */
+                : "=r"(func_ptr)
+                : "r"(kernel_func));
+
+    /* Call kernel function */
+    ((void (*)(void *))func_ptr)(args);
+}
+
+/* Service (Ring 2) accessing user (Ring 3) memory */
+int service_read_user_data(void *user_buf, size_t len) {
+    uint8_t buffer[256];
+
+    /* Ring 2 code */
+    /* Read from user space using Ring 3 page table */
+    for (size_t i = 0; i < len && i < sizeof(buffer); i++) {
+        asm volatile("ldring %0, (%1), 3"  /* ring 3 */
+                    : "=r"(buffer[i])
+                    : "r"((uint8_t *)user_buf + i));
+    }
+
+    return process_data(buffer, len);
+}
+```
+
+#### Privilege Checking
+
+```c
+/* Hardware enforces ring access rules */
+int check_cross_ring_access(int current_ring, int target_ring, int access_type) {
+    /* Rule 1: Can only access equal or less privileged rings */
+    if (current_ring > target_ring) {
+        /* Cannot access more privileged ring's page table */
+        generate_exception(EXCEPTION_PRIVILEGE_VIOLATION);
+        return -EPERM;
+    }
+
+    /* Rule 2: Ring 0 can access all */
+    if (current_ring == RING_0_KERNEL)
+        return 0;  /* Allowed */
+
+    /* Rule 3: Ring 1-3 can access same or lower privilege */
+    if (target_ring >= current_ring)
+        return 0;  /* Allowed */
+
+    return -EPERM;
+}
+```
+
+#### Implementation Examples
+
+```c
+/* Example 1: Debugger (Ring 0) reading any ring */
+void debugger_read_memory(int target_ring, void *addr, void *buf, size_t len) {
+    /* Ring 0 privilege - can access any ring */
+    for (size_t i = 0; i < len; i++) {
+        asm volatile("ldring %0, (%1), %2"
+                    : "=r"(((uint8_t *)buf)[i])
+                    : "r"((uint8_t *)addr + i), "i"(target_ring));
+    }
+}
+
+/* Example 2: System call from user to kernel */
+void syscall_handler(int syscall_num, void *user_args) {
+    /* Now in Ring 0 (kernel) */
+
+    /* Read arguments from user space (Ring 3) */
+    struct syscall_args args;
+    for (size_t i = 0; i < sizeof(args); i++) {
+        asm volatile("ldring %0, (%1), 3"
+                    : "=r"(((uint8_t *)&args)[i])
+                    : "r"((uint8_t *)user_args + i));
+    }
+
+    /* Process syscall */
+    int result = do_syscall(syscall_num, &args);
+
+    /* Write result back to user space (Ring 3) */
+    asm volatile("storing %0, (%1), 3"
+                :: "r"(result), "r"(user_args));
+}
+
+/* Example 3: Device driver (Ring 1) DMA */
+void driver_dma_to_user(void *user_buf, void *dma_buf, size_t len) {
+    /* Ring 1 code */
+
+    /* DMA completed, copy to user buffer using Ring 3 page table */
+    for (size_t i = 0; i < len; i++) {
+        uint8_t byte = ((uint8_t *)dma_buf)[i];
+        asm volatile("storing %0, (%1), 3"
+                    :: "r"(byte), "r"((uint8_t *)user_buf + i));
+    }
+}
+```
+
+#### TLB Tagging for Multi-Ring
+
+```c
+/* TLB entries tagged with ring number */
+typedef struct {
+    uint32_t vpn;
+    uint32_t pfn:20;
+    uint32_t ring:2;        /* Source ring (0-3) */
+    uint32_t asid:8;        /* Address space ID */
+    uint32_t valid:1;
+    uint32_t writable:1;
+    /* ... */
+} tlb_entry_multi_ring_t;
+
+/* TLB lookup with ring consideration */
+tlb_entry_multi_ring_t *tlb_lookup_ring(uint32_t va, int ring) {
+    for (int i = 0; i < TLB_ENTRIES; i++) {
+        if (tlb[i].valid &&
+            tlb[i].vpn == (va >> 12) &&
+            tlb[i].ring == ring) {
+            return &tlb[i];
+        }
+    }
+
+    return NULL;
+}
+```
+
+#### Performance Considerations
+
+```c
+/* Alternate page table instructions are slightly slower */
+
+// Regular load: 1 cycle (L1 cache hit)
+LD   r1, (r2)
+
+// Alternate page table load: 2-3 cycles
+// - 1 cycle: Select alternate page table base
+// - 1 cycle: TLB lookup (may miss if different ASID)
+// - 1 cycle: Load data
+LDALT r1, (r2)
+
+// Cross-ring load (4-ring mode): 3-4 cycles
+// - 1 cycle: Select ring's page table base
+// - 1 cycle: Privilege check
+// - 1 cycle: TLB lookup
+// - 1 cycle: Load data
+LDRING r1, (r2), 3
+
+/* Use regular loads when possible */
+/* Use alternate loads only when necessary */
+```
+
+#### Atomic Operations Across Rings
+
+```assembly
+# Atomic compare-and-swap across rings
+CASRING rd, rs, rt, (ra), ring
+# Atomically:
+#   temp = MEM[ra] (using ring's page table)
+#   if (temp == rs) MEM[ra] = rt
+#   rd = temp
+
+# Fetch-and-add across rings
+FAADDRING rd, rs, (rt), ring
+# Atomically:
+#   temp = MEM[rt] (using ring's page table)
+#   MEM[rt] = temp + rs
+#   rd = temp
+```
+
+#### Security Implications
+
+```c
+/* Alternate page table instructions require careful use */
+
+/* GOOD: Kernel validating user pointer before access */
+int safe_copy_from_user(void *kdst, void *usrc, size_t len) {
+    /* Validate user address range */
+    if (!is_user_address(usrc, len))
+        return -EFAULT;
+
+    /* Use LDALT to safely read user memory */
+    for (size_t i = 0; i < len; i++) {
+        asm("ldalt %0, (%1)" : "=r"(((uint8_t *)kdst)[i])
+                            : "r"((uint8_t *)usrc + i));
+    }
+
+    return 0;
+}
+
+/* BAD: Driver directly accessing kernel memory (security violation) */
+void bad_driver_code(void *kernel_secret) {
+    /* Ring 1 trying to read Ring 0 memory */
+    uint32_t secret;
+    asm("ldring %0, (%1), 0" : "=r"(secret) : "r"(kernel_secret));
+    /* This will FAIL - Ring 1 cannot access Ring 0! */
+    /* Hardware generates EXCEPTION_PRIVILEGE_VIOLATION */
+}
+```
+
+## 6. Configuration and Control
 
 ### CP0 Register Summary
 
