@@ -2758,9 +2758,16 @@ enum bool dylib_only)
 {
     unsigned long i, j, section_type;
     struct mach_header *mh;
+    struct mach_header_64 *mh64;
+    unsigned long magic, ncmds, sizeofcmds, flags;
+    cpu_type_t cputype;
+    cpu_subtype_t cpusubtype;
+    unsigned long filetype;
     struct load_command l, *lc, *load_commands;
     struct segment_command *sg;
+    struct segment_command_64 *sg64;
     struct section *s;
+    struct section_64 *s64;
     struct symtab_command *st;
     struct dysymtab_command *dyst;
     struct symseg_command *ss;
@@ -2775,27 +2782,75 @@ enum bool dylib_only)
     struct dylib_table_of_contents *tocs;
     struct dylib_module *mods;
     struct dylib_reference *refs;
+    unsigned long header_size;
 
     static const struct symtab_command empty_symtab = { 0 };
     static const struct dysymtab_command empty_dysymtab = { 0 };
 
-	/* check to see the mach_header is valid */
+	/* check to see the mach_header is valid (at least 32-bit size) */
 	if(sizeof(struct mach_header) > cur_obj->obj_size){
 	    error_with_cur_obj("truncated or malformed object (mach header "
 			       "extends past the end of the file)");
 	    return;
 	}
+
+	/* Detect if this is a 32-bit or 64-bit Mach-O file */
 	mh = (struct mach_header *)cur_obj->obj_addr;
+	magic = mh->magic;
 	cur_obj->swapped = FALSE;
-	if(mh->magic == SWAP_LONG(MH_MAGIC)){
-	    cur_obj->swapped = TRUE;
-	    swap_mach_header(mh, host_byte_sex);
+	cur_obj->is_64bit = FALSE;
+
+	/* Check for 32-bit magic numbers */
+	if(magic == MH_MAGIC){
+	    cur_obj->is_64bit = FALSE;
 	}
-	if(mh->magic != MH_MAGIC){
+	else if(magic == SWAP_LONG(MH_MAGIC)){
+	    cur_obj->swapped = TRUE;
+	    cur_obj->is_64bit = FALSE;
+	}
+	/* Check for 64-bit magic numbers */
+	else if(magic == MH_MAGIC_64){
+	    cur_obj->is_64bit = TRUE;
+	}
+	else if(magic == SWAP_LONG(MH_MAGIC_64)){
+	    cur_obj->swapped = TRUE;
+	    cur_obj->is_64bit = TRUE;
+	}
+	else{
 	    error_with_cur_obj("bad magic number (not a Mach-O file)");
 	    return;
 	}
-	if(mh->cputype != 0){
+
+	/* For 64-bit files, check that the full header is present */
+	if(cur_obj->is_64bit){
+	    if(sizeof(struct mach_header_64) > cur_obj->obj_size){
+		error_with_cur_obj("truncated or malformed object (mach_header_64 "
+				   "extends past the end of the file)");
+		return;
+	    }
+	    mh64 = (struct mach_header_64 *)cur_obj->obj_addr;
+	    if(cur_obj->swapped)
+		swap_mach_header_64(mh64, host_byte_sex);
+	    cputype = mh64->cputype;
+	    cpusubtype = mh64->cpusubtype;
+	    filetype = mh64->filetype;
+	    ncmds = mh64->ncmds;
+	    sizeofcmds = mh64->sizeofcmds;
+	    flags = mh64->flags;
+	    header_size = sizeof(struct mach_header_64);
+	}
+	else{
+	    if(cur_obj->swapped)
+		swap_mach_header(mh, host_byte_sex);
+	    cputype = mh->cputype;
+	    cpusubtype = mh->cpusubtype;
+	    filetype = mh->filetype;
+	    ncmds = mh->ncmds;
+	    sizeofcmds = mh->sizeofcmds;
+	    flags = mh->flags;
+	    header_size = sizeof(struct mach_header);
+	}
+	if(cputype != 0){
 	    if(target_byte_sex == UNKNOWN_BYTE_SEX){
 		if(cur_obj->swapped == TRUE)
 		    target_byte_sex = host_byte_sex == BIG_ENDIAN_BYTE_SEX ?
@@ -2809,9 +2864,8 @@ enum bool dylib_only)
 	     * matches (the case the architecture has been previous selected).
 	     */
 	    if(arch_flag.cputype){
-		if(arch_flag.cputype != mh->cputype){
-		    new_arch = get_arch_name_from_types(mh->cputype,
-						        mh->cpusubtype);
+		if(arch_flag.cputype != cputype){
+		    new_arch = get_arch_name_from_types(cputype, cpusubtype);
 		    prev_arch = get_arch_name_from_types(arch_flag.cputype,
 						         arch_flag.cpusubtype);
 		    if(no_arch_warnings == TRUE)
@@ -2820,7 +2874,7 @@ enum bool dylib_only)
 			if(arch_errors_fatal == TRUE){
 			    error_with_cur_obj("cputype (%d, architecture %s) "
 				"does not match cputype (%d) for specified "
-				"-arch flag: %s", mh->cputype, new_arch,
+				"-arch flag: %s", cputype, new_arch,
 				arch_flag.cputype, arch_flag.name);
 #ifndef RLD
 				if(told_ProjectBuilder == FALSE){
@@ -2833,7 +2887,7 @@ enum bool dylib_only)
 			else
 			    warning_with_cur_obj("cputype (%d, architecture %s)"
 				" does not match cputype (%d) for specified "
-				"-arch flag: %s (file not loaded)", mh->cputype,
+				"-arch flag: %s (file not loaded)", cputype,
 				 new_arch, arch_flag.cputype, arch_flag.name);
 		    }
 		    else{
@@ -2841,7 +2895,7 @@ enum bool dylib_only)
 			    error_with_cur_obj("cputype (%d, architecture %s) "
 				"does not match cputype (%d architecture %s) "
 				"of objects files previously loaded",
-				mh->cputype, new_arch, arch_flag.cputype,
+				cputype, new_arch, arch_flag.cputype,
 				prev_arch);
 #ifndef RLD
 				if(told_ProjectBuilder == FALSE){
@@ -2855,7 +2909,7 @@ enum bool dylib_only)
 			    warning_with_cur_obj("cputype (%d, architecture %s)"
 				" does not match cputype (%d architecture %s) "
 				"of objects files previously loaded (file not "
-				"loaded)", mh->cputype, new_arch,
+				"loaded)", cputype, new_arch,
 				arch_flag.cputype,prev_arch);
 		    }
 		    return;
@@ -2863,10 +2917,10 @@ enum bool dylib_only)
 		/* deal with combining this cpusubtype and what is current */
 		if(force_cpusubtype_ALL == FALSE){
 		    new_cpusubtype = cpusubtype_combine(arch_flag.cputype,
-					  arch_flag.cpusubtype, mh->cpusubtype);
+					  arch_flag.cpusubtype, cpusubtype);
 		    if(new_cpusubtype == -1){
-			new_arch = get_arch_name_from_types(mh->cputype,
-							    mh->cpusubtype);
+			new_arch = get_arch_name_from_types(cputype,
+							    cpusubtype);
 			prev_arch = get_arch_name_from_types(arch_flag.cputype,
 							 arch_flag.cpusubtype);
 			if(no_arch_warnings == TRUE)
@@ -2877,7 +2931,7 @@ enum bool dylib_only)
 				    "architecture %s) does not combine with "
 				    "cpusubtype (%d) for specified -arch flag: "
 				    "%s and -force_cpusubtype_ALL not "
-				    "specified", mh->cpusubtype, new_arch,
+				    "specified", cpusubtype, new_arch,
 				    arch_flag.cpusubtype, arch_flag.name);
 #ifndef RLD
 				    if(told_ProjectBuilder == FALSE){
@@ -2892,7 +2946,7 @@ enum bool dylib_only)
 				    "architecture %s) does not combine with "
 				    "cpusubtype (%d) for specified -arch flag: "
 				    "%s and -force_cpusubtype_ALL not specified"
-				    " (file not loaded)", mh->cpusubtype,
+				    " (file not loaded)", cpusubtype,
 				    new_arch, arch_flag.cpusubtype,
 				    arch_flag.name);
 			}
@@ -2903,7 +2957,7 @@ enum bool dylib_only)
 				    "cpusubtype (%d, architecture %s) of "
 				    "objects files previously loaded and "
 				    "-force_cpusubtype_ALL not specified",
-				    mh->cpusubtype, new_arch,
+				    cpusubtype, new_arch,
 				    arch_flag.cpusubtype, prev_arch);
 #ifndef RLD
 				    if(told_ProjectBuilder == FALSE){
@@ -2919,7 +2973,7 @@ enum bool dylib_only)
 				    "cpusubtype (%d, architecture %s) of "
 				    "objects files previously loaded and "
 				    "-force_cpusubtype_ALL not specified (file "
-				    "not loaded)", mh->cpusubtype, new_arch,
+				    "not loaded)", cpusubtype, new_arch,
 				    arch_flag.cpusubtype, prev_arch);
 			}
 			return;
@@ -2936,13 +2990,13 @@ enum bool dylib_only)
 			 */
 			if(specific_arch_flag == TRUE){
 			    if(arch_flag.cpusubtype != new_cpusubtype){
-			      new_arch = get_arch_name_from_types(mh->cputype,
-								mh->cpusubtype);
+			      new_arch = get_arch_name_from_types(cputype,
+								cpusubtype);
 			      warning_with_cur_obj("cpusubtype (%d, "
 				"architecture %s) does not combine with "
 				"cpusubtype (%d) for specified -arch flag: %s "
 				"and -force_cpusubtype_ALL not specified (file "
-				"not loaded)", mh->cpusubtype, new_arch,
+				"not loaded)", cpusubtype, new_arch,
 				arch_flag.cpusubtype, arch_flag.name);
 			    }
 			}
@@ -2951,12 +3005,12 @@ enum bool dylib_only)
 		    }
 		}
 		else{ /* force_cpusubtype_ALL == TRUE */
-		    family_arch_flag =get_arch_family_from_cputype(mh->cputype);
+		    family_arch_flag =get_arch_family_from_cputype(cputype);
 		    if(family_arch_flag != NULL)
 			arch_flag.cpusubtype = family_arch_flag->cpusubtype;
 		    else{
 			warning_with_cur_obj("cputype (%d) unknown (file not "
-			    "loaded)", mh->cputype);
+			    "loaded)", cputype);
 			return;
 		    }
 		}
@@ -2967,17 +3021,17 @@ enum bool dylib_only)
 	     * architecture has not been selected).
 	     */
 	    else{
-		family_arch_flag = get_arch_family_from_cputype(mh->cputype);
+		family_arch_flag = get_arch_family_from_cputype(cputype);
 		if(family_arch_flag == NULL){
 		    error_with_cur_obj("cputype (%d) unknown (file not loaded)",
-			 mh->cputype);
+			 cputype);
 		    return;
 		}
-		arch_flag.cputype = mh->cputype;
+		arch_flag.cputype = cputype;
 		if(force_cpusubtype_ALL == TRUE)
 		    arch_flag.cpusubtype = family_arch_flag->cpusubtype;
 		else
-		    arch_flag.cpusubtype = mh->cpusubtype;
+		    arch_flag.cpusubtype = cpusubtype;
 		if(target_byte_sex != get_byte_sex_from_flag(family_arch_flag))
 		    error_with_cur_obj("wrong bytesex for cputype (%d) for "
 			"-arch %s (bad object or this program out of sync with "
@@ -2986,18 +3040,18 @@ enum bool dylib_only)
 			family_arch_flag->name);
 	    }
 	}
-	if(mh->sizeofcmds + sizeof(struct mach_header) > cur_obj->obj_size){
+	if(sizeofcmds + header_size > cur_obj->obj_size){
 	    error_with_cur_obj("truncated or malformed object (load commands "
 			       "extend past the end of the file)");
 	    return;
 	}
-	if((mh->flags & MH_INCRLINK) != 0){
+	if((flags & MH_INCRLINK) != 0){
 	    error_with_cur_obj("was the output of an incremental link, can't "
 			       "be link edited again");
 	    return;
 	}
-	if((mh->flags & MH_DYLDLINK) != 0 && 
-	   (mh->filetype != MH_DYLIB && mh->filetype != MH_DYLINKER)){
+	if((flags & MH_DYLDLINK) != 0 && 
+	   (filetype != MH_DYLIB && filetype != MH_DYLINKER)){
 	    error_with_cur_obj("is input for the dynamic link editor, is not "
 			       "relocatable by the static link editor again");
 	    return;
@@ -3006,7 +3060,7 @@ enum bool dylib_only)
 	 * If this is a MH_DYLIB file then a single LC_ID_DYLIB command must be
 	 * seen to identify the library.
 	 */
-	cur_obj->dylib = (enum bool)(mh->filetype == MH_DYLIB);
+	cur_obj->dylib = (enum bool)(filetype == MH_DYLIB);
 	dlid = NULL;
 	if(cur_obj->dylib == TRUE && dynamic == FALSE){
 	    error_with_cur_obj("incompatible, file is a dynamic shared library "
@@ -3021,7 +3075,7 @@ enum bool dylib_only)
 	 * If this is a MH_DYLINKER file then a single LC_ID_DYLINKER command
 	 * must be seen to identify the dynamic linker.
 	 */
-	cur_obj->dylinker = (enum bool)(mh->filetype == MH_DYLINKER);
+	cur_obj->dylinker = (enum bool)(filetype == MH_DYLINKER);
 	dyldid = NULL;
 	if(cur_obj->dylinker == TRUE && dynamic == FALSE){
 	    error_with_cur_obj("incompatible, file is a dynamic link editor "
@@ -3031,11 +3085,11 @@ enum bool dylib_only)
 
 	/* check to see that the load commands are valid */
 	load_commands = (struct load_command *)((char *)cur_obj->obj_addr +
-			    sizeof(struct mach_header));
+			    header_size);
 	st = NULL;
 	dyst = NULL;
 	lc = load_commands;
-	for(i = 0; i < mh->ncmds; i++){
+	for(i = 0; i < ncmds; i++){
 	    l = *lc;
 	    if(cur_obj->swapped)
 		swap_load_command(&l, host_byte_sex);
@@ -3050,7 +3104,7 @@ enum bool dylib_only)
 		return;
 	    }
 	    if((char *)lc + l.cmdsize >
-	       (char *)load_commands + mh->sizeofcmds){
+	       (char *)load_commands + sizeofcmds){
 		error_with_cur_obj("load command %lu extends past end of all "
 				   "load commands", i);
 		return;
@@ -3116,7 +3170,7 @@ enum bool dylib_only)
 		    /* check to see that segment name in the section structure
 		       matches the one in the segment command if this is not in
 		       an MH_OBJECT filetype */
-		    if(mh->filetype != MH_OBJECT &&
+		    if(filetype != MH_OBJECT &&
 		       strcmp(sg->segname, s->segname) != 0){
 			error_with_cur_obj("segment name %.16s of section %lu "
 				"(%.16s,%.16s) in load command %lu does not "

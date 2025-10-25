@@ -41,6 +41,8 @@ struct object_file {
     unsigned long obj_size;	/* Size of the object file. */
     enum bool swapped;		/* TRUE if the bytesex of the object does not */
 				/*  match the host bytesex. */
+    enum bool is_64bit;		/* TRUE if this is a 64-bit Mach-O file */
+				/*  (MH_MAGIC_64). */
     enum bool fvmlib_stuff;	/* TRUE if any SG_FVMLIB segments or any */
 				/*  LC_LOADFVMLIB or LC_IDFVMLIB load */
 				/*  commands in the file. */
