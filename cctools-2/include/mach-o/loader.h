@@ -727,9 +727,36 @@ struct dylib_module {
 	objc_module_info_addr;  /*  the (__OBJC,__module_info) section */
     unsigned long		/* for this module size of */
 	objc_module_info_size;	/*  the (__OBJC,__module_info) section */
-};	
+};
 
-/* 
+/* a 64-bit module table entry */
+struct dylib_module_64 {
+    unsigned long module_name;	/* the module name (index into string table) */
+
+    unsigned long iextdefsym;	/* index into externally defined symbols */
+    unsigned long nextdefsym;	/* number of externally defined symbols */
+    unsigned long irefsym;		/* index into reference symbol table */
+    unsigned long nrefsym;	/* number of reference symbol table entries */
+    unsigned long ilocalsym;	/* index into symbols for local symbols */
+    unsigned long nlocalsym;	/* number of local symbols */
+
+    unsigned long iextrel;	/* index into external relocation entries */
+    unsigned long nextrel;	/* number of external relocation entries */
+
+    unsigned long iinit_iterm;	/* low 16 bits are the index into the init
+				   section, high 16 bits are the index into
+				   the term section */
+    unsigned long ninit_nterm;	/* low 16 bits are the number of init section
+				   entries, high 16 bits are the number of
+				   term section entries */
+
+    unsigned long		/* for this module address of the start of */
+	objc_module_info_addr;  /*  the (__OBJC,__module_info) section */
+    unsigned long long		/* for this module size of */
+	objc_module_info_size;	/*  the (__OBJC,__module_info) section */
+};
+
+/*
  * The entries in the reference symbol table are used when loading the module
  * (both by the static and dynamic link editors) and if the module is unloaded
  * or replaced.  Therefore all external symbols (defined and undefined) are
