@@ -75,6 +75,13 @@ machdep/alpha/cpuconf.c		standard
 # Utility functions
 machdep/alpha/utils.s		standard
 
+# Platform support (AlphaStation 500/600)
+machdep/alpha/platform.c	standard
+machdep/alpha/cia.c		standard
+machdep/alpha/pci.c		standard
+machdep/alpha/isa.c		standard
+machdep/alpha/rtc_nvram.c	standard
+
 # BSD Alpha-specific files
 bsd/dev/alpha/conf.c		standard
 bsd/dev/alpha/cons.c		standard
