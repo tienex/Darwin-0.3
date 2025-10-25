@@ -26,7 +26,8 @@ SYM_DIRS = $(SYMROOT)/driver_dir \
 	   $(SYMROOT)/appc_dir \
 	   $(SYMROOT)/a860_dir \
 	   $(SYMROOT)/ahppa_dir \
-	   $(SYMROOT)/asparc_dir
+	   $(SYMROOT)/asparc_dir \
+	   $(SYMROOT)/ammix_dir
 
 OFILE_DIRS = $(OBJROOT)/driver_dir \
 	     $(OBJROOT)/a68_dir \
@@ -35,7 +36,8 @@ OFILE_DIRS = $(OBJROOT)/driver_dir \
 	     $(OBJROOT)/appc_dir \
 	     $(OBJROOT)/a860_dir \
 	     $(OBJROOT)/ahppa_dir \
-	     $(OBJROOT)/asparc_dir
+	     $(OBJROOT)/asparc_dir \
+	     $(OBJROOT)/ammix_dir
 
 BINDIR = /bin
 USRBINDIR = /usr/bin
@@ -54,6 +56,7 @@ CFILES_i386 = i386.c
 CFILES_ppc = ppc.c
 CFILES_hppa = hppa.c hppa-aux.c
 CFILES_sparc = sparc.c
+CFILES_mmix = mmix.c
 
 
 HFILES = app.h as.h atof-ieee.h bignum.h expr.h fixes.h flonum.h frags.h \
@@ -61,14 +64,14 @@ HFILES = app.h as.h atof-ieee.h bignum.h expr.h fixes.h flonum.h frags.h \
 	 input-scrub.h layout.h m68k-opcode.h m88k-opcode.h ppc-opcode.h md.h \
 	 messages.h obstack.h read.h relax.h sections.h struc-symbol.h \
 	 symbols.h write_object.h xmalloc.h hppa-aux.h hppa-opcode.h \
-	 sparc-opcode.h
+	 sparc-opcode.h mmix-opcode.h
 
 CHECK_FILES = m68k-check.c m88k-check.c i860-check.c i386-check.c ppc-check.c \
-	      hppa-check.c sparc-check.c
+	      hppa-check.c sparc-check.c mmix-check.c
 
 INSTALL_FILES = Makefile notes $(CFILES) $(CFILES_m68k) $(CFILES_m88k) \
 		$(CFILES_i860) $(CFILES_i386) $(CFILES_ppc) $(CFILES_hppa) \
-		$(CFILES_sparc) $(HFILES) $(CHECK_FILES) driver.c \
+		$(CFILES_sparc) $(CFILES_mmix) $(HFILES) $(CHECK_FILES) driver.c \
 		make.defs make_defs.h
 
 OBJS = $(CFILES:.c=.o) apple_version.o
@@ -79,9 +82,10 @@ OBJS_i386 = $(CFILES_i386:.c=.o)
 OBJS_ppc = $(CFILES_ppc:.c=.o)
 OBJS_hppa = $(CFILES_hppa:.c=.o)
 OBJS_sparc = $(CFILES_sparc:.c=.o)
+OBJS_mmix = $(CFILES_mmix:.c=.o)
 
 all:	$(OFILE_DIRS) $(SYM_DIRS) driver_build a68_build a88_build a386_build \
-	a860_build appc_build ahppa_build asparc_build
+	a860_build appc_build ahppa_build asparc_build ammix_build
 
 all_test:	a68_test a88_test a860_test a386_test appc_test ahppa_test
 
@@ -377,3 +381,29 @@ $(OFILE_DIRS) $(SYM_DIRS):
 	$(MKDIRS) $@
 
 -include $(DEP_DIR)/Makedep
+
+ammix_build:	$(OBJROOT)/ammix_dir
+	@if [ $(SRCROOT) = . ];						\
+	then								\
+	    cd ammix_dir; $(MAKE) -f ../Makefile as VPATH=.. OFILE_DIR=.\
+		SRCROOT=.. TARGET_OBJS="$(OBJS_mmix)" DEP_DIR=ammix_dir	\
+		VERS_STRING_FLAGS="$(VERS_STRING_FLAGS)" OFLAG=$(OFLAG)	\
+		RC_CFLAGS="$(RC_CFLAGS)" COPTS="-DMMIX";		\
+	else								\
+	    cd $(OBJROOT)/ammix_dir; $(MAKE) -f $(SRCROOT)/Makefile as	\
+		VPATH=$(SRCROOT) OFILE_DIR=$(OBJROOT)/ammix_dir		\
+		SYMROOT=$(SYMROOT)/ammix_dir SRCROOT=$(SRCROOT)		\
+		TARGET_OBJS="$(OBJS_mmix)" COPTS="-DMMIX"		\
+		VERS_STRING_FLAGS="$(VERS_STRING_FLAGS)"		\
+		RC_CFLAGS="$(RC_CFLAGS)" DEP_DIR=ammix_dir;		\
+	fi
+
+ammix_test: ammix_dir
+	cd ammix_dir; $(MAKE) -f ../Makefile mmix-check VPATH=.. \
+		OFILE_DIR=. SRCROOT=.. COPTS="-DMMIX"
+	cd ammix_dir; $(MAKE) -f ../Makefile test
+
+
+mmix-check:
+	$(CC) $(COPTS) $(CFLAGS) -o check ../mmix-check.c
+

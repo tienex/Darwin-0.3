@@ -7,23 +7,20 @@
 #ifndef _MMIX_RELOC_H_
 #define _MMIX_RELOC_H_
 
-#include <mach-o/reloc.h>
-#include "objects.h"
+#if defined(__MWERKS__) && !defined(__private_extern__)
+#define __private_extern__ __declspec(private_extern)
+#endif
 
+/*
+ * Global types, variables and routines declared in the file mmix_reloc.c.
+ *
+ * The following include file need to be included before this file:
+ * #include <reloc.h>
+ * #include "sections.h"
+ */
 __private_extern__ void mmix_reloc(
-    void *data,
+    char *contents,
     struct relocation_info *relocs,
-    unsigned long nreloc,
-    struct section_map *section_map,
-    struct nlist *symbols,
-    unsigned long nsymbols);
-
-__private_extern__ unsigned long mmix_get_reloc_r_address(
-    struct relocation_info *reloc);
-
-__private_extern__ void mmix_free_reloc(
-    void *data,
-    struct relocation_info *relocs,
-    unsigned long nreloc);
+    struct section_map *map);
 
 #endif /* _MMIX_RELOC_H_ */

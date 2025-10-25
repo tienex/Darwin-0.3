@@ -35,21 +35,23 @@
 __private_extern__
 void
 mmix_reloc(
-void *data,
+char *contents,
 struct relocation_info *relocs,
-unsigned long nreloc,
-struct section_map *section_map,
-struct nlist *symbols,
-unsigned long nsymbols)
+struct section_map *section_map)
 {
 	unsigned long i, j, value, offset, r_symbolnum, r_address, r_type;
 	unsigned long r_extern, r_pcrel, r_length;
-	enum bool force_extern_reloc;
-	struct nlist *nlists;
-	char *strings;
+	unsigned long nreloc;
 	unsigned long content;
 	unsigned long long content_long;
 	struct scattered_relocation_info *sreloc;
+	struct nlist *symbols;
+
+	/* Get relocation count from section map */
+	nreloc = section_map->s->nreloc;
+
+	/* Get symbols from current object */
+	symbols = cur_obj->symbols;
 
 	for(i = 0; i < nreloc; i++){
 	    /*
@@ -63,16 +65,21 @@ unsigned long nsymbols)
 		r_type = sreloc->r_type;
 		r_extern = 0;
 		/* Calculate r_symbolnum (the section ordinal) */
-		for(j = 0; j < nsections; j++){
-		    if(sreloc->r_value >= sections[j].s.addr &&
-		       sreloc->r_value < sections[j].s.addr +
-		       sections[j].s.size)
+		r_symbolnum = 0;
+		for(j = 0; j < cur_obj->nsection_maps; j++){
+		    if(sreloc->r_value >= cur_obj->section_maps[j].s->addr &&
+		       sreloc->r_value < cur_obj->section_maps[j].s->addr +
+		                         cur_obj->section_maps[j].s->size){
+			r_symbolnum = j + 1;
 			break;
+		    }
 		}
-		if(j >= nsections)
-		    fatal("bad scattered relocation entry %lu (address or "
-			"offset greater than the size of the section)", i);
-		r_symbolnum = j + 1;
+		if(r_symbolnum == 0){
+		    error_with_cur_obj("bad scattered relocation entry %lu (address or "
+			"offset out of range) in section (%.16s,%.16s)", i,
+			section_map->s->segname, section_map->s->sectname);
+		    return;
+		}
 		r_length = sreloc->r_length;
 		offset = sreloc->r_value;
 	    }
@@ -89,28 +96,31 @@ unsigned long nsymbols)
 	    /*
 	     * Check the r_address field
 	     */
-	    if(r_address >= section_map->s->size)
-		fatal("bad r_address (0x%x) for relocation entry %lu in "
+	    if(r_address >= section_map->s->size){
+		error_with_cur_obj("bad r_address (0x%x) for relocation entry %lu in "
 		    "section (%.16s,%.16s)", (unsigned int)r_address, i,
 		    section_map->s->segname, section_map->s->sectname);
+		return;
+	    }
 
 	    /*
 	     * Get the content at the address to be relocated
 	     */
 	    if(r_length == 2){
-		content = *((unsigned long *)(data + r_address));
+		content = *((unsigned long *)(contents + r_address));
 		if(section_map->input_reloc_flags & RELOC_IN_NEED_SWAP)
 		    content = SWAP_LONG(content);
 	    }
 	    else if(r_length == 3){
-		content_long = *((unsigned long long *)(data + r_address));
+		content_long = *((unsigned long long *)(contents + r_address));
 		if(section_map->input_reloc_flags & RELOC_IN_NEED_SWAP)
 		    content_long = SWAP_LONG_LONG(content_long);
 	    }
 	    else{
-		fatal("bad r_length (%lu) for MMIX relocation entry %lu in "
+		error_with_cur_obj("bad r_length (%lu) for MMIX relocation entry %lu in "
 		    "section (%.16s,%.16s)", r_length, i,
 		    section_map->s->segname, section_map->s->sectname);
+		return;
 	    }
 
 	    /*
@@ -122,29 +132,31 @@ unsigned long nsymbols)
 		 * Vanilla relocation - simple address relocation
 		 */
 		if(r_extern){
-		    value = symbols[r_symbolnum].n_value;
+		    value = symbols[r_symbolnum].n_value + offset;
 		}
 		else{
 		    if(r_symbolnum == R_ABS)
-			value = 0;
-		    else if(r_symbolnum > nsections)
-			fatal("bad r_symbolnum (%lu) for relocation entry "
+			value = offset;
+		    else if(r_symbolnum > cur_obj->nsection_maps){
+			error_with_cur_obj("bad r_symbolnum (%lu) for relocation entry "
 			    "%lu", r_symbolnum, i);
+			return;
+		    }
 		    else
-			value = section_map->output_section->s.addr;
+			value = section_map->output_section->s.addr + offset;
 		}
 
 		if(r_length == 3){
-		    content_long += value + offset;
+		    content_long += value;
 		    if(section_map->output_reloc_flags & RELOC_OUT_NEED_SWAP)
 			content_long = SWAP_LONG_LONG(content_long);
-		    *((unsigned long long *)(data + r_address)) = content_long;
+		    *((unsigned long long *)(contents + r_address)) = content_long;
 		}
 		else{
-		    content += value + offset;
+		    content += value;
 		    if(section_map->output_reloc_flags & RELOC_OUT_NEED_SWAP)
 			content = SWAP_LONG(content);
-		    *((unsigned long *)(data + r_address)) = content;
+		    *((unsigned long *)(contents + r_address)) = content;
 		}
 		break;
 
@@ -155,89 +167,60 @@ unsigned long nsymbols)
 	    case MMIX_RELOC_HIGH16:
 		/* High 16 bits of address */
 		if(r_extern)
-		    value = symbols[r_symbolnum].n_value;
+		    value = symbols[r_symbolnum].n_value + offset;
 		else
-		    value = section_map->output_section->s.addr;
+		    value = section_map->output_section->s.addr + offset;
 
 		content = (content & 0xFFFF0000) | ((value >> 16) & 0xFFFF);
 		if(section_map->output_reloc_flags & RELOC_OUT_NEED_SWAP)
 		    content = SWAP_LONG(content);
-		*((unsigned long *)(data + r_address)) = content;
+		*((unsigned long *)(contents + r_address)) = content;
 		break;
 
 	    case MMIX_RELOC_LOW16:
 		/* Low 16 bits of address */
 		if(r_extern)
-		    value = symbols[r_symbolnum].n_value;
+		    value = symbols[r_symbolnum].n_value + offset;
 		else
-		    value = section_map->output_section->s.addr;
+		    value = section_map->output_section->s.addr + offset;
 
 		content = (content & 0xFFFF0000) | (value & 0xFFFF);
 		if(section_map->output_reloc_flags & RELOC_OUT_NEED_SWAP)
 		    content = SWAP_LONG(content);
-		*((unsigned long *)(data + r_address)) = content;
+		*((unsigned long *)(contents + r_address)) = content;
 		break;
 
 	    case MMIX_RELOC_BR24:
 		/* 24-bit branch relocation */
-		if(r_pcrel == 0)
-		    fatal("MMIX_RELOC_BR24 must be PC-relative");
+		if(r_pcrel == 0){
+		    error_with_cur_obj("MMIX_RELOC_BR24 must be PC-relative");
+		    return;
+		}
 
 		if(r_extern)
-		    value = symbols[r_symbolnum].n_value;
+		    value = symbols[r_symbolnum].n_value + offset;
 		else
-		    value = section_map->output_section->s.addr;
+		    value = section_map->output_section->s.addr + offset;
 
 		/* Calculate PC-relative offset */
 		value = value - (section_map->output_section->s.addr + r_address);
 		value = value >> 2;  /* Instruction addresses are word-aligned */
 
-		if((value & 0xFF000000) != 0 && (value & 0xFF000000) != 0xFF000000)
-		    fatal("branch out of range for relocation entry %lu", i);
+		if((value & 0xFF000000) != 0 && (value & 0xFF000000) != 0xFF000000){
+		    error_with_cur_obj("branch out of range for relocation entry %lu", i);
+		    return;
+		}
 
 		content = (content & 0xFF000000) | (value & 0x00FFFFFF);
 		if(section_map->output_reloc_flags & RELOC_OUT_NEED_SWAP)
 		    content = SWAP_LONG(content);
-		*((unsigned long *)(data + r_address)) = content;
+		*((unsigned long *)(contents + r_address)) = content;
 		break;
 
 	    default:
-		fatal("unknown relocation type %lu for MMIX relocation entry "
+		error_with_cur_obj("unknown relocation type %lu for MMIX relocation entry "
 		    "%lu", r_type, i);
-		break;
+		return;
 	    }
 	}
-}
-
-/*
- * mmix_get_reloc_r_address() returns the r_address field of a
- * relocation entry pointed to by reloc.
- */
-__private_extern__
-unsigned long
-mmix_get_reloc_r_address(
-struct relocation_info *reloc)
-{
-	struct scattered_relocation_info *sreloc;
-
-	if((reloc->r_address & R_SCATTERED) != 0){
-	    sreloc = (struct scattered_relocation_info *)reloc;
-	    return(sreloc->r_address);
-	}
-	else{
-	    return(reloc->r_address);
-	}
-}
-
-/*
- * mmix_free_reloc() is used to free data allocated by mmix_reloc()
- */
-__private_extern__
-void
-mmix_free_reloc(
-void *data,
-struct relocation_info *relocs,
-unsigned long nreloc)
-{
-	/* Nothing to free for MMIX relocations */
 }
