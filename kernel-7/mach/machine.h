@@ -129,7 +129,7 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_TYPE_MC88000	((cpu_type_t) 13)
 #define CPU_TYPE_SPARC		((cpu_type_t) 14)
 #define CPU_TYPE_I860		((cpu_type_t) 15)
-/* skip	CPU_TYPE_ALPHA		((cpu_type_t) 16)	*/
+#define CPU_TYPE_ALPHA		((cpu_type_t) 16)
 /* skip				((cpu_type_t) 17)	*/
 #define CPU_TYPE_POWERPC		((cpu_type_t) 18)
 
@@ -262,6 +262,20 @@ extern vm_offset_t		interrupt_stack[];
  */
 #define CPU_SUBTYPE_I860_ALL	((cpu_subtype_t) 0)
 #define CPU_SUBTYPE_I860_860	((cpu_subtype_t) 1)
+
+/*
+ *	Alpha subtypes
+ */
+#define CPU_SUBTYPE_ALPHA_ALL		((cpu_subtype_t) 0)
+#define CPU_SUBTYPE_ALPHA_EV3		((cpu_subtype_t) 1)
+#define CPU_SUBTYPE_ALPHA_EV4		((cpu_subtype_t) 2)
+#define CPU_SUBTYPE_ALPHA_EV5		((cpu_subtype_t) 3)
+#define CPU_SUBTYPE_ALPHA_EV45		((cpu_subtype_t) 4)
+#define CPU_SUBTYPE_ALPHA_LCA		((cpu_subtype_t) 5)
+#define CPU_SUBTYPE_ALPHA_EV56		((cpu_subtype_t) 6)
+#define CPU_SUBTYPE_ALPHA_EV6		((cpu_subtype_t) 7)
+#define CPU_SUBTYPE_ALPHA_PCA56		((cpu_subtype_t) 8)
+#define CPU_SUBTYPE_ALPHA_EV67		((cpu_subtype_t) 9)
 
 /*
  *	PowerPC subtypes

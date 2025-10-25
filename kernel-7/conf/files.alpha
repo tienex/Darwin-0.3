@@ -1,0 +1,57 @@
+OPTIONS/show_space		optional show_space
+OPTIONS/eventmeter		optional eventmeter
+OPTIONS/gdb			optional gdb
+OPTIONS/iplmeas			optional iplmeas
+
+bsd/dev/vol.c			optional vol
+
+machdep/alpha/kdp_machdep.c	standard
+
+# Core Alpha kernel files
+machdep/alpha/start.s		standard
+machdep/alpha/alpha_init.c	standard
+machdep/alpha/exception.s	standard
+machdep/alpha/trap.c		standard
+machdep/alpha/machdep.c		standard
+machdep/alpha/pmap.c		standard
+
+# PALcode support files
+machdep/alpha/palcode_unix.c	standard
+machdep/alpha/palcode_nt.c	standard
+machdep/alpha/palcode_vms.c	standard
+
+# Context switching and thread support
+machdep/alpha/pcb.c		standard
+machdep/alpha/cswtch.s		standard
+
+# System call support
+machdep/alpha/syscall.c		standard
+machdep/alpha/unix_signal.c	standard
+machdep/alpha/unix_startup.c	standard
+
+# Memory and VM support
+machdep/alpha/vm_machdep.c	standard
+machdep/alpha/fault_copy.c	standard
+
+# Machine-dependent support
+machdep/alpha/kern_machdep.c	standard
+machdep/alpha/sys_machdep.c	standard
+machdep/alpha/machdep_call.c	standard
+machdep/alpha/swapgeneric.c	standard
+
+# Clock and timing
+machdep/alpha/machine_clock.c	standard
+
+# Miscellaneous
+machdep/alpha/in_cksum.c	standard
+machdep/alpha/bcopy.s		standard
+machdep/alpha/bzero.s		standard
+machdep/alpha/fpu.c		standard
+
+# BSD Alpha-specific files
+bsd/dev/alpha/conf.c		standard
+bsd/dev/alpha/cons.c		standard
+bsd/dev/alpha/mem.c		standard
+
+# Alpha-specific device support
+bsd/dev/alpha/rtc.c		standard
