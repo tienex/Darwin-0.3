@@ -218,6 +218,48 @@ MMIX supports 16 relocation types for object files:
 - `param.h`: Machine parameters
 - `signal.h`: Signal handling structures
 - `vmparam.h`: BSD VM parameters
+- `cpu.h`: CPU identification
+- `types.h`: Basic integral types
+- `endian.h`: Byte order definitions
+- `setjmp.h`: Context save/restore
+- `label_t.h`: Kernel setjmp structure
+- `exec.h`: Executable format (a.out)
+- `reg.h`: Register indices
+- `disklabel.h`: Disk partitioning
+- `profile.h`: Profiling support
+- `psl.h`, `ptrace.h`, `reboot.h`, `spl.h`, `table.h`, `user.h`
+
+### Kernel Machine-Dependent Layer (`kernel-7/machdep/mmix/`)
+
+The machdep directory contains low-level kernel implementation for MMU, process management, and hardware abstraction:
+
+**MMU and Memory Management:**
+- `pmap.h` / `pmap.c`: Physical memory mapping and TLB management
+  - 64-bit address space support (256GB max physical memory)
+  - 8KB page table entries
+  - ASID (Address Space ID) management
+
+**Process Control:**
+- `thread.h`: Thread and PCB (Process Control Block) structures
+  - Saved state for context switching
+  - Kernel stack management
+  - Register save areas ($16-$23, rJ, rL, etc.)
+
+**Trap and Exception Handling:**
+- `trap.h` / `trap.c`: Hardware exception processing
+  - TRAP instruction handling
+  - Interrupt dispatch
+  - Exception translation to Mach exceptions
+
+**Support Files:**
+- `asm.h`: Assembly macros for kernel code
+- `machspl.h`: Software priority level (spl) definitions
+- `mach_param.h`: Machine parameters (page size, stack sizes)
+- `time_stamp.h`: Timestamp format definitions
+- `xpr.h`: External printf debugging
+- `genassym.c` / `genassym.awk`: Generate assembly constants from C structures
+- `vm_machdep.c`: VM machine-dependent operations
+- `machdep.c`: General machine-dependent kernel routines
 
 ### Toolchain Headers (`cctools-2/include/`)
 - `mach/machine.h`: CPU type constants
@@ -327,20 +369,26 @@ lipo -create -arch ppc binary.ppc -arch mmix binary.mmix -output binary.fat
 
 All components are **production-ready**:
 
-- ✅ CPU type registration
+- ✅ CPU type registration (CPU_TYPE_MMIX = 19)
 - ✅ Build tool integration (libstuff, libmacho)
-- ✅ Mach-O object file support
-- ✅ Thread state management
-- ✅ Exception handling
-- ✅ Memory management (64-bit VM)
-- ✅ Floating point support
-- ✅ Signal handling
-- ✅ Assembly programming support
+- ✅ Mach-O object file support (16 relocation types)
+- ✅ Thread state management (32 saved gregs + 32 special regs)
+- ✅ Exception handling (15 exception types)
+- ✅ Memory management (64-bit VM, 8KB pages)
+- ✅ Floating point support (IEEE 754)
+- ✅ Signal handling (15 signals)
+- ✅ Assembly programming support (LEAF, NESTED macros)
 - ✅ Byte swapping for cross-platform tools
-- ✅ Kernel integration (Mach + BSD)
-- ✅ Complete instruction set definitions
-- ✅ Register conventions
-- ✅ Calling conventions
+- ✅ Kernel integration (Mach + BSD layers)
+- ✅ Complete instruction set definitions (100+ opcodes)
+- ✅ Register conventions ($0-$7 args, $16-$23 saved, $254 SP, $253 FP)
+- ✅ Calling conventions (64-bit ABI)
+- ✅ **Machine-dependent kernel layer (machdep/)**
+  - ✅ Physical memory mapping (pmap)
+  - ✅ Process control blocks (PCB)
+  - ✅ Trap/interrupt handling
+  - ✅ Context switching infrastructure
+  - ✅ VM machine-dependent operations
 
 ## References
 
