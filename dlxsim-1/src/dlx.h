@@ -156,6 +156,8 @@
 #define STATUS_INTRMASK 0x0000FF00  /* Interrupt Mask */
 #define STATUS_PAGE_TABLE 0x00010000  /* Page Table Mode */
 #define STATUS_TLB      0x00020000  /* TLB Mode */
+#define STATUS_SYS_BE   0x00040000  /* System Mode Big-Endian (1=BE, 0=LE) */
+#define STATUS_USR_BE   0x00080000  /* User Mode Big-Endian (1=BE, 0=LE) */
 
 /* Cause Register Bits */
 #define CAUSE_EXCCODE   0x0000003C  /* Exception Code */
@@ -179,6 +181,11 @@
 #define TIMER_ADDR      0xFFF00010  /* Timer register */
 #define KBD_DATA_ADDR   0xFFF00100  /* Keyboard data */
 #define KBD_STATUS_ADDR 0xFFF00104  /* Keyboard status */
+
+/* Helper macros for endianness */
+#define IS_KERNEL_MODE(status) ((status) & STATUS_KUC)
+#define IS_BIG_ENDIAN(status) \
+    (IS_KERNEL_MODE(status) ? ((status) & STATUS_SYS_BE) : ((status) & STATUS_USR_BE))
 
 /* DLX CPU State */
 typedef struct {
@@ -220,6 +227,13 @@ typedef struct {
     int kbd_head, kbd_tail;          /* Keyboard buffer pointers */
 } dlx_devices_t;
 
+/* Executable Format Types */
+typedef enum {
+    FORMAT_RAW,      /* Raw binary */
+    FORMAT_MACHO,    /* Mach-O executable */
+    FORMAT_PECOFF    /* PE/COFF executable */
+} dlx_format_t;
+
 /* Complete DLX Simulator State */
 typedef struct {
     dlx_cpu_t cpu;
@@ -252,6 +266,9 @@ void dlx_mem_write_byte(dlx_sim_t *sim, uint32_t addr, uint8_t value);
 
 /* Memory loading */
 int dlx_load_binary(dlx_sim_t *sim, const char *filename, uint32_t addr);
+int dlx_load_macho(dlx_sim_t *sim, const char *filename);
+int dlx_load_pecoff(dlx_sim_t *sim, const char *filename);
+dlx_format_t dlx_detect_format(const char *filename);
 
 /* MMU */
 uint32_t dlx_mmu_translate(dlx_sim_t *sim, uint32_t vaddr, int write);
