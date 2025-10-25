@@ -57,6 +57,24 @@ machdep/alpha/debug.c		standard
 # Assembly constant generation
 machdep/alpha/genassym.c	standard
 
+# SMP support
+machdep/alpha/smp.c		standard
+
+# Performance monitoring
+machdep/alpha/perf.c		standard
+
+# Atomic operations
+machdep/alpha/atomic.c		standard
+
+# HWRPB support
+machdep/alpha/hwrpb.c		standard
+
+# CPU detection and configuration
+machdep/alpha/cpuconf.c		standard
+
+# Utility functions
+machdep/alpha/utils.s		standard
+
 # BSD Alpha-specific files
 bsd/dev/alpha/conf.c		standard
 bsd/dev/alpha/cons.c		standard
