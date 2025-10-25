@@ -258,6 +258,14 @@ unsigned long nfat_archs)
 		    return(fat_archs + i);
 	    }
 	    break;
+	case CPU_TYPE_VAX:
+	    for(i = 0; i < nfat_archs; i++){
+		if(fat_archs[i].cputype != cputype)
+		    continue;
+		if(fat_archs[i].cpusubtype == CPU_SUBTYPE_VAX_ALL)
+		    return(fat_archs + i);
+	    }
+	    break;
 	default:
 	    return(NULL);
 	}
@@ -422,6 +430,13 @@ cpu_subtype_t cpusubtype2)
 			return((cpu_subtype_t)-1);
 	    if(cpusubtype2 != CPU_SUBTYPE_SPARC_ALL)
 			return((cpu_subtype_t)-1);
+	    break; /* logically can't get here */
+
+	case CPU_TYPE_VAX:
+	    if(cpusubtype1 != CPU_SUBTYPE_VAX_ALL)
+		return((cpu_subtype_t)-1);
+	    if(cpusubtype2 != CPU_SUBTYPE_VAX_ALL)
+		return((cpu_subtype_t)-1);
 	    break; /* logically can't get here */
 
 	default:

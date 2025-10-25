@@ -44,6 +44,7 @@ cpu_type_t cputype)
 	switch(cputype){
 	case CPU_TYPE_MC680x0:
 	case CPU_TYPE_I386:
+	case CPU_TYPE_VAX:
 	    return(GENERIC_RELOC_PAIR);
 	    break;
 	case CPU_TYPE_MC88000:
@@ -81,6 +82,7 @@ unsigned long r_type)
 	switch(cputype){
 	case CPU_TYPE_MC680x0:
 	case CPU_TYPE_I386:
+	case CPU_TYPE_VAX:
 	    if(r_type == GENERIC_RELOC_SECTDIFF)
 		return(TRUE);
 	    break;
@@ -146,6 +148,7 @@ unsigned long r_type)
 	switch(cputype){
 	case CPU_TYPE_MC680x0:
 	case CPU_TYPE_I386:
+	case CPU_TYPE_VAX:
 	    if(r_type == GENERIC_RELOC_SECTDIFF)
 		return(TRUE);
 	    break;

@@ -175,6 +175,15 @@ print_arch(
 struct fat_arch *fat_arch)
 {
 	switch(fat_arch->cputype){
+	case CPU_TYPE_VAX:
+	    switch(fat_arch->cpusubtype){
+	    case CPU_SUBTYPE_VAX_ALL:
+		printf("vax\n");
+		break;
+	    default:
+		goto print_arch_unknown;
+	    }
+	    break;
 	case CPU_TYPE_MC680x0:
 	    switch(fat_arch->cpusubtype){
 	    case CPU_SUBTYPE_MC680x0_ALL:
@@ -330,6 +339,16 @@ cpu_type_t cputype,
 cpu_subtype_t cpusubtype)
 {
 	switch(cputype){
+	case CPU_TYPE_VAX:
+	    switch(cpusubtype){
+	    case CPU_SUBTYPE_VAX_ALL:
+		printf("    cputype CPU_TYPE_VAX\n"
+		       "    cpusubtype CPU_SUBTYPE_VAX_ALL\n");
+		break;
+	    default:
+		goto print_arch_unknown;
+	    }
+	    break;
 	case CPU_TYPE_MC680x0:
 	    switch(cpusubtype){
 	    case CPU_SUBTYPE_MC680x0_ALL:
@@ -3890,6 +3909,7 @@ unsigned long r_type)
 	switch(cputype){
 	case CPU_TYPE_MC680x0:
 	case CPU_TYPE_I386:
+	case CPU_TYPE_VAX:
 	    printf("%s", generic_r_types[r_type]);
 	    break;
 	case CPU_TYPE_MC88000:
