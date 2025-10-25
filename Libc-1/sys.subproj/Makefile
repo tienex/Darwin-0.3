@@ -17,7 +17,7 @@ GLOBAL_RESOURCES = CLIB-LIST MISSING-MANPAGE MISSING_SYSCALLS\
 
 CFILES = gettimeofday.c sigprocmask.c errno.c
 
-SUBPROJECTS = i386.subproj ppc.subproj
+SUBPROJECTS = i386.subproj ppc.subproj ia64.subproj
 
 OTHERSRCS = Makefile.preamble Makefile Makefile.postamble
 

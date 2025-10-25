@@ -28,7 +28,7 @@ CFILES = alarm.c assert.c clock.c closedir.c confstr.c crypt.c\
          ttyslot.c ualarm.c uname.c unvis.c usleep.c utime.c vis.c\
          wait.c wait3.c waitpid.c
 
-SUBPROJECTS = i386.subproj ppc.subproj
+SUBPROJECTS = i386.subproj ppc.subproj ia64.subproj
 
 OTHERSRCS = Makefile.preamble Makefile Makefile.postamble
 

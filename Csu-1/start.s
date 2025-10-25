@@ -21,9 +21,9 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-#if defined(m68k) || defined(i386) || defined(ppc)
+#if defined(m68k) || defined(i386) || defined(ppc) || defined(ia64)
 /*
- * C runtime startup for m68k, i386 & ppc
+ * C runtime startup for m68k, i386, ppc & ia64
  *
  * Kernel or dyld sets up stack frame to look like:
  *
@@ -52,7 +52,7 @@
  *
  *	Where arg[i] and env[i] point into the STRING AREA
  */
-#endif /* defined(m68k) || defined(i386) || defined(ppc) */
+#endif /* defined(m68k) || defined(i386) || defined(ppc) || defined(ia64) */
 
 #ifdef m68k
 	.text
@@ -137,6 +137,39 @@ start:
 	.stabs "",100,0,0,L_end
 L_end:
 #endif /* ppc */
+
+#ifdef ia64
+	.text
+	.align 16
+L_start:
+	.stabs "start.s",100,0,0,L_start
+	.stabs "int:t1=r1;-2147483648;2147483647;",128,0,0,0
+	.stabs "char:t2=r2;0;127;",128,0,0,0
+
+	.global start
+	.proc start
+start:
+	/* IA64 startup stub */
+	/* Stack frame setup for IA64 */
+	/* TODO: Implement proper IA64 startup sequence */
+	alloc	loc0 = ar.pfs, 0, 3, 3, 0
+	mov	loc1 = rp			/* save return pointer */
+	mov	loc2 = gp			/* save global pointer */
+
+	/* Load argc, argv, envp for _start call */
+	ld8	out0 = [sp]			/* argc */
+	adds	out1 = 8, sp			/* argv */
+	adds	r14 = 8, out0			/* argc + 1 */
+	shladd	out2 = r14, 3, out1		/* envp = argv + (argc+1)*8 */
+
+	br.call.sptk.many rp = __start		/* call _start(argc, argv, envp) */
+	;;
+	break	0				/* should never return */
+
+	.stabs "",100,0,0,L_end
+L_end:
+	.endp start
+#endif /* ia64 */
 
 #ifdef hppa
 /*
