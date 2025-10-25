@@ -288,7 +288,667 @@ typedef struct {
 } virtio_gpu_resource_create_2d_t;
 ```
 
-## 3. Console and Display Emulation
+## 3. IOMMU (I/O Memory Management Unit)
+
+### IOMMU Architecture
+
+The IOMMU provides DMA remapping and protection, essential for device virtualization and isolation.
+
+```c
+/* IOMMU Device */
+typedef struct {
+    pcie_config_type0_t pci_config;
+
+    /* Capability Registers */
+    uint32_t version;           /* IOMMU version */
+    uint64_t capabilities;      /* Feature flags */
+#define IOMMU_CAP_PAGING        (1ULL << 0)    /* Page table support */
+#define IOMMU_CAP_INTERRUPT_REMAP (1ULL << 1)  /* Interrupt remapping */
+#define IOMMU_CAP_CACHE_COHERENT (1ULL << 2)   /* Cache coherency */
+#define IOMMU_CAP_IOTLB         (1ULL << 3)    /* IOTLB support */
+#define IOMMU_CAP_PASID         (1ULL << 4)    /* Process address space ID */
+#define IOMMU_CAP_PRI           (1ULL << 5)    /* Page request interface */
+#define IOMMU_CAP_ATS           (1ULL << 6)    /* Address translation service */
+#define IOMMU_CAP_NESTED        (1ULL << 7)    /* Nested translation */
+
+    /* Control Registers */
+    uint32_t global_control;    /* Global control */
+#define IOMMU_GCMD_ENABLE       (1 << 0)
+#define IOMMU_GCMD_SET_ROOT_PTR (1 << 1)
+#define IOMMU_GCMD_IOTLB_INV    (1 << 2)
+#define IOMMU_GCMD_CACHE_INV    (1 << 3)
+#define IOMMU_GCMD_INTR_REMAP   (1 << 4)
+
+    uint32_t global_status;     /* Global status */
+    uint64_t root_table_ptr;    /* Root table address */
+    uint64_t context_cmd;       /* Context command */
+    uint32_t fault_status;      /* Fault status */
+    uint32_t fault_event_ctrl;  /* Fault event control */
+    uint64_t fault_event_data;  /* Fault event data */
+    uint32_t fault_event_addr;  /* Fault event address */
+
+    /* IOTLB Invalidation */
+    uint64_t iotlb_inv;         /* IOTLB invalidate */
+    uint64_t iotlb_inv_addr;    /* Address for selective invalidation */
+
+    /* Interrupt Remapping */
+    uint64_t intr_remap_table;  /* Interrupt remapping table base */
+    uint32_t intr_remap_ctl;    /* Interrupt remapping control */
+
+    /* Fault Recording Registers */
+    struct {
+        uint64_t fault_addr;    /* Faulting address */
+        uint32_t fault_info;    /* Fault information */
+#define FAULT_INFO_TYPE_MASK    0xF
+#define FAULT_REASON_MASK       0xFF0
+        uint16_t source_id;     /* Source device ID (Bus:Dev:Func) */
+        uint16_t pasid;         /* PASID if applicable */
+    } fault_record[256];
+
+    int num_faults;
+
+    /* Device Context Tables */
+    struct iommu_context_table *root_table;
+
+    /* IOTLB Cache */
+    struct iotlb_entry {
+        uint64_t iova;          /* I/O Virtual Address */
+        uint64_t phys_addr;     /* Physical Address */
+        uint16_t did;           /* Domain ID */
+        uint16_t pasid;         /* PASID */
+        uint32_t flags;
+        int valid;
+    } iotlb[4096];
+
+    /* Statistics */
+    uint64_t translations;
+    uint64_t iotlb_hits;
+    uint64_t iotlb_misses;
+    uint64_t faults;
+} iommu_t;
+```
+
+### IOMMU Page Tables
+
+```c
+/* IOMMU uses similar page table structure to CPU MMU */
+/* Supports 2-level, 3-level, or 4-level page tables */
+
+typedef struct {
+    uint64_t present:1;
+    uint64_t read:1;
+    uint64_t write:1;
+    uint64_t execute:1;         /* Some IOMMUs support execute permission */
+    uint64_t supervise:1;       /* Supervisor/user mode */
+    uint64_t snoop:1;           /* Cache snoop */
+    uint64_t accessed:1;
+    uint64_t dirty:1;
+    uint64_t page_size:1;       /* 0=4KB, 1=large page */
+    uint64_t global:1;
+    uint64_t available:3;
+    uint64_t addr:40;           /* Physical address [51:12] */
+    uint64_t reserved:11;
+    uint64_t no_execute:1;
+} iommu_pte_t;
+
+/* Domain Context Entry */
+typedef struct {
+    uint64_t present:1;
+    uint64_t fault_disable:1;
+    uint64_t translation_type:2;  /* Pass-through, translate, etc. */
+#define IOMMU_TT_PASSTHROUGH    0
+#define IOMMU_TT_TRANSLATE      1
+#define IOMMU_TT_NESTED         2
+
+    uint64_t address_width:3;     /* 39, 48, 57 bits */
+    uint64_t hint:1;
+    uint64_t reserved1:4;
+    uint64_t slptr:52;            /* Second level page table pointer */
+
+    uint64_t domain_id:16;
+    uint64_t reserved2:5;
+    uint64_t aw:1;                /* Adjusted guest address width */
+    uint64_t eim:1;               /* Extended interrupt mode */
+    uint64_t reserved3:41;
+} iommu_context_entry_t;
+```
+
+### DMA Remapping
+
+```c
+/* DMA Read/Write through IOMMU */
+uint64_t iommu_translate_dma(iommu_t *iommu, uint16_t source_id,
+                             uint64_t iova, int access_type) {
+    /* 1. Look up device context */
+    iommu_context_entry_t *context = lookup_context(iommu, source_id);
+
+    if (!context->present) {
+        record_fault(iommu, FAULT_CONTEXT_NOT_PRESENT, source_id, iova);
+        return INVALID_ADDR;
+    }
+
+    /* 2. Check for pass-through mode */
+    if (context->translation_type == IOMMU_TT_PASSTHROUGH) {
+        return iova;  /* No translation */
+    }
+
+    /* 3. Check IOTLB cache */
+    struct iotlb_entry *entry = iotlb_lookup(iommu, context->domain_id, iova);
+    if (entry && entry->valid) {
+        iommu->iotlb_hits++;
+        return entry->phys_addr | (iova & 0xFFF);  /* Combine with offset */
+    }
+
+    iommu->iotlb_misses++;
+
+    /* 4. Page table walk */
+    iommu_pte_t *pte = walk_page_table(iommu, context->slptr, iova);
+
+    if (!pte || !pte->present) {
+        record_fault(iommu, FAULT_PAGE_NOT_PRESENT, source_id, iova);
+        return INVALID_ADDR;
+    }
+
+    /* 5. Check permissions */
+    if (access_type == DMA_WRITE && !pte->write) {
+        record_fault(iommu, FAULT_WRITE_PERMISSION, source_id, iova);
+        return INVALID_ADDR;
+    }
+
+    if (access_type == DMA_READ && !pte->read) {
+        record_fault(iommu, FAULT_READ_PERMISSION, source_id, iova);
+        return INVALID_ADDR;
+    }
+
+    /* 6. Update IOTLB */
+    uint64_t phys_addr = (pte->addr << 12);
+    iotlb_insert(iommu, context->domain_id, iova, phys_addr);
+
+    /* 7. Return translated address */
+    return phys_addr | (iova & 0xFFF);
+}
+```
+
+### Interrupt Remapping
+
+```c
+/* Interrupt Remapping Table Entry */
+typedef struct {
+    uint64_t present:1;
+    uint64_t mode:1;            /* 0=remapped, 1=posted */
+    uint64_t trigger_mode:1;    /* 0=edge, 1=level */
+    uint64_t delivery_mode:3;   /* Fixed, LP, SMI, NMI, INIT, ExtINT */
+    uint64_t reserved1:2;
+    uint64_t destination_id:32; /* Target CPU APIC ID */
+    uint64_t vector:8;          /* Interrupt vector */
+    uint64_t reserved2:16;
+
+    /* Posted interrupt descriptor (if mode=1) */
+    uint64_t posted_desc_addr;
+} intr_remap_entry_t;
+
+/* Remap MSI/MSI-X interrupt */
+int iommu_remap_interrupt(iommu_t *iommu, uint16_t source_id,
+                          uint32_t msi_data, uint64_t msi_addr,
+                          uint32_t *new_data, uint64_t *new_addr) {
+    /* Extract index from MSI address/data */
+    int index = extract_irte_index(msi_addr, msi_data);
+
+    /* Look up remapping table entry */
+    intr_remap_entry_t *irte = &iommu->intr_remap_table[index];
+
+    if (!irte->present) {
+        record_fault(iommu, FAULT_INTERRUPT_REMAP, source_id, 0);
+        return -1;
+    }
+
+    /* Construct remapped MSI */
+    *new_addr = construct_msi_addr(irte->destination_id);
+    *new_data = construct_msi_data(irte->vector, irte->delivery_mode,
+                                   irte->trigger_mode);
+
+    return 0;
+}
+```
+
+### PASID (Process Address Space ID)
+
+```c
+/* PASID Support for Shared Virtual Memory (SVM) */
+typedef struct {
+    uint32_t pasid_max;         /* Maximum PASID value */
+
+    /* Per-PASID page tables */
+    struct pasid_entry {
+        uint64_t slptr;         /* Second level page table */
+        int valid;
+        int supervisor;
+        uint64_t domain_id;
+    } pasid_table[65536];       /* Up to 64K PASIDs */
+
+} iommu_pasid_t;
+
+/* PASID TLP Prefix (PCIe extension) */
+typedef struct {
+    uint16_t type:4;            /* 0x2 = PASID */
+    uint16_t length:8;
+    uint16_t reserved:4;
+    uint32_t pasid:20;
+    uint32_t exe:1;             /* Execute requested */
+    uint32_t priv:1;            /* Privileged mode */
+    uint32_t reserved2:10;
+} pcie_pasid_prefix_t;
+```
+
+### Page Request Interface (PRI)
+
+```c
+/* Page Request for On-Demand Paging */
+typedef struct {
+    uint16_t function;          /* Requesting function */
+    uint32_t pasid:20;          /* PASID */
+    uint32_t prg_index:9;       /* Page request group index */
+    uint32_t reserved:2;
+    uint32_t response:1;        /* 0=request, 1=response */
+
+    uint64_t page_addr;         /* Requested page address */
+
+    uint32_t read:1;
+    uint32_t write:1;
+    uint32_t exec:1;
+    uint32_t priv:1;
+    uint32_t last_in_group:1;
+    uint32_t reserved2:27;
+} page_request_t;
+
+/* Handle page request */
+void iommu_handle_page_request(iommu_t *iommu, page_request_t *req) {
+    /* Resolve page fault */
+    uint64_t phys_addr = resolve_guest_page_fault(req->page_addr, req->pasid);
+
+    /* Update page table */
+    install_page_mapping(iommu, req->pasid, req->page_addr, phys_addr,
+                        req->read, req->write, req->exec);
+
+    /* Send response */
+    send_page_response(req->function, req->prg_index, phys_addr);
+}
+```
+
+## 4. SR-IOV (Single Root I/O Virtualization)
+
+### SR-IOV Architecture
+
+SR-IOV allows a single PCIe device to appear as multiple separate physical devices to guest VMs.
+
+```c
+/* SR-IOV Capability Structure (PCIe Extended Capability) */
+typedef struct {
+    uint16_t cap_id;            /* 0x0010 = SR-IOV */
+    uint16_t cap_version:4;
+    uint16_t next_cap:12;
+
+    /* SR-IOV Capabilities */
+    uint32_t capabilities;
+#define SRIOV_CAP_VF_MIGRATION  (1 << 0)
+#define SRIOV_CAP_ARI           (1 << 1)  /* Alternative Routing-ID */
+#define SRIOV_CAP_VF_10BIT_TAG  (1 << 2)
+
+    /* SR-IOV Control */
+    uint16_t control;
+#define SRIOV_CTRL_VF_ENABLE    (1 << 0)
+#define SRIOV_CTRL_VF_MSE       (1 << 1)  /* VF Memory Space Enable */
+#define SRIOV_CTRL_ARI_ENABLE   (1 << 2)
+
+    /* SR-IOV Status */
+    uint16_t status;
+#define SRIOV_STATUS_VF_MIGRATION  (1 << 0)
+
+    /* Initial VFs */
+    uint16_t initial_vfs;       /* Initial number of VFs */
+
+    /* Total VFs */
+    uint16_t total_vfs;         /* Maximum VFs supported */
+
+    /* Number of VFs */
+    uint16_t num_vfs;           /* Current number of VFs */
+
+    /* Function Dependency Link */
+    uint8_t function_dep_link;
+
+    uint8_t reserved1;
+
+    /* First VF Offset */
+    uint16_t first_vf_offset;   /* RID offset from PF */
+
+    /* VF Stride */
+    uint16_t vf_stride;         /* RID stride between VFs */
+
+    uint16_t reserved2;
+
+    /* VF Device ID */
+    uint16_t vf_device_id;      /* Device ID for VFs */
+
+    /* Supported Page Sizes */
+    uint32_t supported_page_sizes;  /* Bitmap of supported page sizes */
+
+    /* System Page Size */
+    uint32_t system_page_size;  /* System page size to use */
+
+    /* VF BARs (6 BARs) */
+    uint32_t vf_bar[6];         /* Base Address Registers for VFs */
+
+    /* VF Migration State Array Offset */
+    uint32_t vf_migration_offset;
+} sriov_capability_t;
+
+/* SR-IOV Device */
+typedef struct {
+    /* Physical Function (PF) */
+    pcie_config_type0_t pf_config;
+    sriov_capability_t sriov_cap;
+
+    /* Virtual Functions (VFs) */
+    struct virtual_function {
+        pcie_config_type0_t config;
+        int enabled;
+        int assigned_vm;        /* Which VM owns this VF */
+
+        /* VF-specific resources */
+        uint64_t bar_addr[6];
+        uint32_t bar_size[6];
+
+        /* VF mailbox for PF↔VF communication */
+        void *mailbox;
+        int mailbox_irq;
+
+        /* Statistics */
+        uint64_t tx_packets;
+        uint64_t rx_packets;
+        uint64_t tx_bytes;
+        uint64_t rx_bytes;
+    } vfs[256];                 /* Up to 256 VFs */
+
+    int num_vfs_enabled;
+
+    /* Resource pools shared among VFs */
+    struct {
+        int total_queues;
+        int queues_per_vf;
+        int total_interrupts;
+        int interrupts_per_vf;
+    } resources;
+} sriov_device_t;
+```
+
+### SR-IOV Initialization
+
+```c
+/* Enable SR-IOV on a device */
+int sriov_enable(sriov_device_t *dev, int num_vfs) {
+    sriov_capability_t *cap = &dev->sriov_cap;
+
+    if (num_vfs > cap->total_vfs)
+        return -EINVAL;
+
+    /* Set number of VFs */
+    cap->num_vfs = num_vfs;
+
+    /* Calculate VF BDF (Bus:Device:Function) */
+    uint16_t pf_bdf = get_bdf(&dev->pf_config);
+    uint8_t pf_bus = (pf_bdf >> 8) & 0xFF;
+    uint8_t pf_devfn = pf_bdf & 0xFF;
+
+    for (int i = 0; i < num_vfs; i++) {
+        struct virtual_function *vf = &dev->vfs[i];
+
+        /* Calculate VF routing ID */
+        uint16_t vf_offset = cap->first_vf_offset + (i * cap->vf_stride);
+        uint16_t vf_bdf = pf_bdf + vf_offset;
+
+        /* Initialize VF config space */
+        vf->config.vendor_id = dev->pf_config.vendor_id;
+        vf->config.device_id = cap->vf_device_id;
+        vf->config.class_code = dev->pf_config.class_code;
+
+        /* Map VF BARs */
+        for (int bar = 0; bar < 6; bar++) {
+            if (cap->vf_bar[bar]) {
+                vf->bar_size[bar] = get_bar_size(cap->vf_bar[bar]);
+                vf->bar_addr[bar] = allocate_bar_space(vf->bar_size[bar]);
+                vf->config.bar[bar] = vf->bar_addr[bar];
+            }
+        }
+
+        /* Initialize VF mailbox */
+        vf->mailbox = allocate_mailbox();
+        vf->mailbox_irq = allocate_irq();
+
+        vf->enabled = 1;
+        vf->assigned_vm = -1;  /* Not assigned yet */
+    }
+
+    /* Enable VFs in SR-IOV control */
+    cap->control |= SRIOV_CTRL_VF_ENABLE | SRIOV_CTRL_VF_MSE;
+
+    dev->num_vfs_enabled = num_vfs;
+
+    return 0;
+}
+```
+
+### VF Assignment to VM
+
+```c
+/* Assign VF to a guest VM */
+int sriov_assign_vf_to_vm(sriov_device_t *dev, int vf_index, int vm_id) {
+    if (vf_index >= dev->num_vfs_enabled)
+        return -EINVAL;
+
+    struct virtual_function *vf = &dev->vfs[vf_index];
+
+    if (vf->assigned_vm != -1)
+        return -EBUSY;  /* Already assigned */
+
+    /* Configure IOMMU for this VF */
+    uint16_t vf_bdf = calculate_vf_bdf(dev, vf_index);
+    iommu_setup_domain(&iommu, vf_bdf, vm_id);
+
+    /* Pass through VF to VM */
+    vf->assigned_vm = vm_id;
+
+    /* Inject VF into VM's PCIe bus */
+    vm_add_pcie_device(vm_id, vf_bdf, &vf->config);
+
+    return 0;
+}
+```
+
+### PF↔VF Mailbox Communication
+
+```c
+/* Mailbox for PF-VF communication */
+typedef struct {
+    /* Mailbox registers (mapped in both PF and VF) */
+    uint32_t pf_to_vf_msg[16];  /* PF writes, VF reads */
+    uint32_t vf_to_pf_msg[16];  /* VF writes, PF reads */
+
+    uint32_t pf_to_vf_status;   /* Status/flags */
+    uint32_t vf_to_pf_status;
+
+    uint32_t pf_to_vf_irq;      /* IRQ control */
+    uint32_t vf_to_pf_irq;
+} sriov_mailbox_t;
+
+/* VF requests something from PF */
+void vf_send_request(struct virtual_function *vf, uint32_t opcode, void *data) {
+    sriov_mailbox_t *mbox = vf->mailbox;
+
+    /* Write message */
+    mbox->vf_to_pf_msg[0] = opcode;
+    memcpy(&mbox->vf_to_pf_msg[1], data, 60);  /* 60 bytes of data */
+
+    /* Set status and trigger interrupt to PF */
+    mbox->vf_to_pf_status = MB_STATUS_VALID;
+    mbox->vf_to_pf_irq = 1;
+}
+
+/* PF handles VF request */
+void pf_handle_vf_mailbox(sriov_device_t *dev, int vf_index) {
+    struct virtual_function *vf = &dev->vfs[vf_index];
+    sriov_mailbox_t *mbox = vf->mailbox;
+
+    uint32_t opcode = mbox->vf_to_pf_msg[0];
+
+    switch (opcode) {
+    case MB_OP_SET_MAC:
+        /* VF requests MAC address change */
+        memcpy(vf->mac_addr, &mbox->vf_to_pf_msg[1], 6);
+        break;
+
+    case MB_OP_SET_VLAN:
+        /* VF requests VLAN configuration */
+        vf->vlan_id = mbox->vf_to_pf_msg[1];
+        break;
+
+    case MB_OP_GET_STATS:
+        /* VF requests statistics */
+        mbox->pf_to_vf_msg[0] = vf->tx_packets;
+        mbox->pf_to_vf_msg[1] = vf->rx_packets;
+        mbox->pf_to_vf_msg[2] = vf->tx_bytes;
+        mbox->pf_to_vf_msg[3] = vf->rx_bytes;
+        break;
+
+    case MB_OP_RESET:
+        /* VF requests reset */
+        sriov_reset_vf(dev, vf_index);
+        break;
+    }
+
+    /* Clear VF interrupt and set PF response */
+    mbox->vf_to_pf_irq = 0;
+    mbox->pf_to_vf_status = MB_STATUS_VALID;
+    mbox->pf_to_vf_irq = 1;  /* Interrupt VF with response */
+}
+```
+
+### VF Migration
+
+```c
+/* Live migration of VF between VMs */
+typedef struct {
+    /* Migration state */
+    uint32_t vf_index;
+    uint32_t source_vm;
+    uint32_t dest_vm;
+
+    /* VF state snapshot */
+    struct {
+        pcie_config_type0_t config;
+        uint64_t bar_addr[6];
+        uint8_t mac_addr[6];
+        uint16_t vlan_id;
+
+        /* Device-specific state */
+        void *device_state;
+        size_t state_size;
+
+        /* DMA state */
+        uint32_t tx_queue_head;
+        uint32_t tx_queue_tail;
+        uint32_t rx_queue_head;
+        uint32_t rx_queue_tail;
+    } snapshot;
+} vf_migration_t;
+
+int sriov_migrate_vf(sriov_device_t *dev, int vf_index,
+                    int source_vm, int dest_vm) {
+    vf_migration_t mig = {0};
+    struct virtual_function *vf = &dev->vfs[vf_index];
+
+    /* 1. Pause VF in source VM */
+    vm_pause_device(source_vm, vf);
+
+    /* 2. Snapshot VF state */
+    snapshot_vf_state(vf, &mig.snapshot);
+
+    /* 3. Unassign from source VM */
+    sriov_unassign_vf(dev, vf_index, source_vm);
+
+    /* 4. Assign to destination VM */
+    sriov_assign_vf_to_vm(dev, vf_index, dest_vm);
+
+    /* 5. Restore VF state in destination VM */
+    restore_vf_state(vf, &mig.snapshot);
+
+    /* 6. Resume VF in destination VM */
+    vm_resume_device(dest_vm, vf);
+
+    return 0;
+}
+```
+
+### SR-IOV Network Example
+
+```c
+/* Example: SR-IOV Network Adapter */
+typedef struct {
+    sriov_device_t sriov;
+
+    /* PF resources */
+    struct {
+        uint8_t mac_addr[6];
+        int num_tx_queues;
+        int num_rx_queues;
+        void *tx_ring[64];
+        void *rx_ring[64];
+    } pf;
+
+    /* VF-specific queues */
+    struct {
+        int tx_queue_start;     /* First TX queue for this VF */
+        int num_tx_queues;      /* Number of TX queues */
+        int rx_queue_start;     /* First RX queue for this VF */
+        int num_rx_queues;      /* Number of RX queues */
+
+        /* Rate limiting */
+        uint64_t tx_rate_limit; /* Mbps */
+        uint64_t rx_rate_limit;
+
+        /* QoS */
+        int priority;
+        int vlan_id;
+        int qos_class;
+    } vf_queues[256];
+
+} sriov_network_t;
+
+/* VF transmits packet */
+void vf_tx_packet(sriov_network_t *nic, int vf_index, void *packet, size_t len) {
+    struct virtual_function *vf = &nic->sriov.vfs[vf_index];
+
+    /* Rate limiting */
+    if (!check_rate_limit(nic, vf_index))
+        return;  /* Drop packet - rate limit exceeded */
+
+    /* VLAN tagging (if configured) */
+    if (nic->vf_queues[vf_index].vlan_id) {
+        insert_vlan_tag(packet, nic->vf_queues[vf_index].vlan_id);
+    }
+
+    /* QoS priority */
+    set_packet_priority(packet, nic->vf_queues[vf_index].priority);
+
+    /* Send to wire */
+    int queue = nic->vf_queues[vf_index].tx_queue_start;
+    tx_ring_insert(nic->pf.tx_ring[queue], packet, len);
+
+    vf->tx_packets++;
+    vf->tx_bytes += len;
+}
+```
+
+## 5. Console and Display Emulation
 
 ### SDL1 Backend
 
