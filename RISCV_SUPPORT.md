@@ -106,20 +106,59 @@ Default configuration: `-march=rv64g -mabi=lp64d`
 ## Implementation Status
 
 ### Complete
-- CPU type and subtype definitions
-- Machine-dependent header files
-- Architecture-specific headers
-- Build system integration
-- Configuration files
-- Basic startup code
+- ✅ CPU type and subtype definitions
+- ✅ Machine-dependent header files (10 files in mach/riscv/)
+- ✅ Architecture-specific headers (6 files in architecture-1/riscv/)
+- ✅ Build system integration
+- ✅ Configuration files (MASTER, Makefile, files)
+- ✅ Startup code (start.s with BSS clearing and stack setup)
+- ✅ Trap and exception handling (trap.c with all RISC-V exception causes)
+- ✅ Low-level assembly primitives (locore.s):
+  - trap_entry with full register save/restore
+  - Context switching (switch_to)
+  - Atomic operations (atomic_add/sub)
+  - Memory operations (bcopy/bzero)
+  - Interrupt control (enable/disable)
+  - Cycle counter access
+- ✅ Memory management foundation (pmap.c with all required functions)
+- ✅ Process Control Block support (pcb.c)
+- ✅ VM machine-dependent code (vm_machdep.c)
+- ✅ Kernel initialization (riscv_init.c)
+- ✅ Device drivers (console, device configuration)
+- ✅ Kernel debugger support (kdp_machdep.c)
+- ✅ Signal handling stubs (unix_signal.c)
+- ✅ Clock/timer support (machine_clock.c)
+- ✅ Fault-tolerant copy routines (fault_copy.c)
 
-### To Be Implemented
-- Full trap/exception handling
-- Complete memory management (pmap)
-- Device drivers
-- Interrupt handling
-- Context switching
-- System call implementation
+### Implementation Details
+
+#### Trap Handling
+- Full support for all RISC-V exception causes (scause values)
+- Proper exception code mapping to Darwin EXC_* types
+- User/kernel trap separation via sstatus.SPP bit
+- Exception value extraction via stval CSR
+
+#### Assembly Primitives (locore.s)
+- **trap_entry**: Saves all 32 GP registers, reads scause/stval, calls trap_handler()
+- **switch_to**: Context switch with callee-saved register preservation
+- **Atomic ops**: Uses RISC-V amoadd.w.aqrl instructions
+- **Interrupt control**: Manipulates sstatus.SIE bit
+- **Memory ops**: bcopy and bzero implementations
+
+#### Device Support
+- Console driver with cnputc/cngetc
+- Block and character device switch tables
+- Ready for UART integration (SiFive UART commented in code)
+
+### To Be Fully Implemented
+- Complete pmap page table walking (currently stubs)
+- Full context switching with FP register save/restore
+- Complete system call handler implementation
+- Interrupt controller driver
+- UART device driver
+- Timer interrupt handling
+- DMA support
+- Network drivers
 
 ## References
 
