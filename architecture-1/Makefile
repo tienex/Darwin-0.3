@@ -20,9 +20,9 @@ endif
 
 OBJROOT=.
 
-EXPORT_SOURCE= . i386 ppc
-LOCAL_SOURCE=  . i386 ppc
-TAGS_ARCH= ppc
+EXPORT_SOURCE= . i386 ppc mips
+LOCAL_SOURCE=  . i386 ppc mips
+TAGS_ARCH= ppc mips
 
 ifneq "" "$(wildcard /usr/ucb/unifdef)"
 	UNIFDEF = /usr/ucb/unifdef

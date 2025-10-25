@@ -31,7 +31,7 @@
 # (The first of the list is the arch that is used to source the
 # machine independent headers.)
 #
-HEADER_ARCHS = PPC I386
+HEADER_ARCHS = PPC I386 MIPS
 
 #
 # install parameters
@@ -48,7 +48,7 @@ TFTPDIR = /private/tftpboot
 #
 # "Post new_vers" parameters
 #
-BUILD_ARCHS = PPC I386
+BUILD_ARCHS = PPC I386 MIPS
 BUILD_TYPES = RELEASE
 
 # TAG_ARCHS = PPC I386

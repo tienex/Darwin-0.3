@@ -121,7 +121,7 @@ extern vm_offset_t		interrupt_stack[];
 /* skip				((cpu_type_t) 5)	*/
 #define	CPU_TYPE_MC680x0	((cpu_type_t) 6)
 #define CPU_TYPE_I386		((cpu_type_t) 7)
-/* skip CPU_TYPE_MIPS		((cpu_type_t) 8)	*/
+#define CPU_TYPE_MIPS		((cpu_type_t) 8)
 /* skip 			((cpu_type_t) 9)	*/
 #define CPU_TYPE_MC98000	((cpu_type_t) 10)
 #define CPU_TYPE_HPPA           ((cpu_type_t) 11)
@@ -222,6 +222,7 @@ extern vm_offset_t		interrupt_stack[];
  */
 
 #define	CPU_SUBTYPE_MIPS_ALL	((cpu_subtype_t) 0)
+/* MIPS I */
 #define CPU_SUBTYPE_MIPS_R2300	((cpu_subtype_t) 1)
 #define CPU_SUBTYPE_MIPS_R2600	((cpu_subtype_t) 2)
 #define CPU_SUBTYPE_MIPS_R2800	((cpu_subtype_t) 3)
@@ -229,6 +230,39 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_SUBTYPE_MIPS_R2000	((cpu_subtype_t) 5)
 #define CPU_SUBTYPE_MIPS_R3000a	((cpu_subtype_t) 6)	/* 3max */
 #define CPU_SUBTYPE_MIPS_R3000	((cpu_subtype_t) 7)
+/* MIPS II */
+#define CPU_SUBTYPE_MIPS_R6000	((cpu_subtype_t) 8)
+#define CPU_SUBTYPE_MIPS_R6000a	((cpu_subtype_t) 9)
+/* MIPS III (64-bit) */
+#define CPU_SUBTYPE_MIPS_R4000	((cpu_subtype_t) 10)
+#define CPU_SUBTYPE_MIPS_R4400	((cpu_subtype_t) 11)
+#define CPU_SUBTYPE_MIPS_R4600	((cpu_subtype_t) 12)
+#define CPU_SUBTYPE_MIPS_R4650	((cpu_subtype_t) 13)
+/* MIPS IV (64-bit) */
+#define CPU_SUBTYPE_MIPS_R5000	((cpu_subtype_t) 14)
+#define CPU_SUBTYPE_MIPS_R8000	((cpu_subtype_t) 15)
+#define CPU_SUBTYPE_MIPS_R10000	((cpu_subtype_t) 16)
+#define CPU_SUBTYPE_MIPS_R12000	((cpu_subtype_t) 17)
+#define CPU_SUBTYPE_MIPS_R14000	((cpu_subtype_t) 18)
+#define CPU_SUBTYPE_MIPS_R16000	((cpu_subtype_t) 19)
+/* MIPS V (64-bit) - rarely implemented */
+#define CPU_SUBTYPE_MIPS_V_ALL	((cpu_subtype_t) 20)
+/* MIPS32 Architecture */
+#define CPU_SUBTYPE_MIPS32_ALL	((cpu_subtype_t) 30)
+#define CPU_SUBTYPE_MIPS32_R1	((cpu_subtype_t) 31)
+#define CPU_SUBTYPE_MIPS32_R2	((cpu_subtype_t) 32)
+#define CPU_SUBTYPE_MIPS32_R3	((cpu_subtype_t) 33)
+#define CPU_SUBTYPE_MIPS32_R4	((cpu_subtype_t) 34)
+#define CPU_SUBTYPE_MIPS32_R5	((cpu_subtype_t) 35)
+#define CPU_SUBTYPE_MIPS32_R6	((cpu_subtype_t) 36)
+/* MIPS64 Architecture */
+#define CPU_SUBTYPE_MIPS64_ALL	((cpu_subtype_t) 40)
+#define CPU_SUBTYPE_MIPS64_R1	((cpu_subtype_t) 41)
+#define CPU_SUBTYPE_MIPS64_R2	((cpu_subtype_t) 42)
+#define CPU_SUBTYPE_MIPS64_R3	((cpu_subtype_t) 43)
+#define CPU_SUBTYPE_MIPS64_R4	((cpu_subtype_t) 44)
+#define CPU_SUBTYPE_MIPS64_R5	((cpu_subtype_t) 45)
+#define CPU_SUBTYPE_MIPS64_R6	((cpu_subtype_t) 46)
 
 /*
  *	MC98000 (PowerPC) subtypes
