@@ -861,7 +861,8 @@ enum bool archives_with_fat_objects)
 		memcpy(&magic, addr, sizeof(unsigned long));
 	    /* see if this file is Mach-O file */
 	    if(size >= sizeof(struct mach_header) &&
-	       (magic == MH_MAGIC || magic == SWAP_LONG(MH_MAGIC))){
+	       (magic == MH_MAGIC || magic == SWAP_LONG(MH_MAGIC) ||
+	        magic == MH_MAGIC_64 || magic == SWAP_LONG(MH_MAGIC_64))){
 #ifdef ALIGNMENT_CHECKS
 		if(ofile->fat_archs[i].offset % sizeof(unsigned long) != 0){
 		    error("fat file: %s architecture %s malformed for an "
@@ -878,14 +879,21 @@ enum bool archives_with_fat_objects)
 		ofile->arch_type = OFILE_Mach_O;
 		ofile->object_addr = addr;
 		ofile->object_size = size;
-		if(magic == MH_MAGIC)
+		if(magic == MH_MAGIC || magic == MH_MAGIC_64)
 		    ofile->object_byte_sex = host_byte_sex;
 		else
 		    ofile->object_byte_sex =
 			host_byte_sex == BIG_ENDIAN_BYTE_SEX ?
 			LITTLE_ENDIAN_BYTE_SEX : BIG_ENDIAN_BYTE_SEX;
+		ofile->is_64bit = (magic == MH_MAGIC_64 ||
+				   magic == SWAP_LONG(MH_MAGIC_64)) ?
+				  TRUE : FALSE;
 		ofile->mh = (struct mach_header *)addr;
-		ofile->load_commands = (struct load_command *)(addr +
+		if(ofile->is_64bit)
+		    ofile->load_commands = (struct load_command *)(addr +
+					    sizeof(struct mach_header_64));
+		else
+		    ofile->load_commands = (struct load_command *)(addr +
 					    sizeof(struct mach_header));
 		if(check_Mach_O(ofile) == CHECK_BAD){
 		    ofile_unmap(ofile);
@@ -948,17 +956,25 @@ enum bool archives_with_fat_objects)
 	}
 	/* see if this file is Mach-O file */
 	else if(size >= sizeof(struct mach_header) &&
-		(magic == MH_MAGIC || magic == SWAP_LONG(MH_MAGIC))){
+		(magic == MH_MAGIC || magic == SWAP_LONG(MH_MAGIC) ||
+		 magic == MH_MAGIC_64 || magic == SWAP_LONG(MH_MAGIC_64))){
 	    ofile->file_type = OFILE_Mach_O;
 	    ofile->object_addr = addr;
 	    ofile->object_size = size;
-	    if(magic == MH_MAGIC)
+	    if(magic == MH_MAGIC || magic == MH_MAGIC_64)
 		ofile->object_byte_sex = host_byte_sex;
 	    else
 		ofile->object_byte_sex = host_byte_sex == BIG_ENDIAN_BYTE_SEX ?
 				 LITTLE_ENDIAN_BYTE_SEX : BIG_ENDIAN_BYTE_SEX;
+	    ofile->is_64bit = (magic == MH_MAGIC_64 ||
+			       magic == SWAP_LONG(MH_MAGIC_64)) ?
+			      TRUE : FALSE;
 	    ofile->mh = (struct mach_header *)addr;
-	    ofile->load_commands = (struct load_command *)(addr +
+	    if(ofile->is_64bit)
+		ofile->load_commands = (struct load_command *)(addr +
+					sizeof(struct mach_header_64));
+	    else
+		ofile->load_commands = (struct load_command *)(addr +
 					sizeof(struct mach_header));
 	    if(check_Mach_O(ofile) == CHECK_BAD){
 		ofile_unmap(ofile);
@@ -1197,7 +1213,8 @@ unsigned long narch)
 	    memcpy(&magic, addr, sizeof(unsigned long));
 	/* see if this file is Mach-O file */
 	if(size >= sizeof(struct mach_header) &&
-	   (magic == MH_MAGIC || magic == SWAP_LONG(MH_MAGIC))){
+	   (magic == MH_MAGIC || magic == SWAP_LONG(MH_MAGIC) ||
+	    magic == MH_MAGIC_64 || magic == SWAP_LONG(MH_MAGIC_64))){
 #ifdef ALIGNMENT_CHECKS
 	    if(ofile->fat_archs[ofile->narch].offset %
 	       sizeof(unsigned long) != 0){
@@ -1221,14 +1238,21 @@ unsigned long narch)
 	    ofile->object_addr = addr;
 	    ofile->object_size = size;
 	    host_byte_sex = get_host_byte_sex();
-	    if(magic == MH_MAGIC)
+	    if(magic == MH_MAGIC || magic == MH_MAGIC_64)
 		ofile->object_byte_sex = host_byte_sex;
 	    else
 		ofile->object_byte_sex =
 		    host_byte_sex == BIG_ENDIAN_BYTE_SEX ?
 		    LITTLE_ENDIAN_BYTE_SEX : BIG_ENDIAN_BYTE_SEX;
+	    ofile->is_64bit = (magic == MH_MAGIC_64 ||
+			       magic == SWAP_LONG(MH_MAGIC_64)) ?
+			      TRUE : FALSE;
 	    ofile->mh = (struct mach_header *)addr;
-	    ofile->load_commands = (struct load_command *)(addr +
+	    if(ofile->is_64bit)
+		ofile->load_commands = (struct load_command *)(addr +
+					sizeof(struct mach_header_64));
+	    else
+		ofile->load_commands = (struct load_command *)(addr +
 					sizeof(struct mach_header));
 	    if(check_Mach_O(ofile) == CHECK_BAD)
 		goto cleanup;
@@ -1421,7 +1445,8 @@ struct ofile *ofile)
 	    }
 	    else if(size - (offset + ar_name_size) >=
 		    sizeof(struct mach_header) &&
-	       (magic == MH_MAGIC || magic == SWAP_LONG(MH_MAGIC))){
+	       (magic == MH_MAGIC || magic == SWAP_LONG(MH_MAGIC) ||
+	        magic == MH_MAGIC_64 || magic == SWAP_LONG(MH_MAGIC_64))){
 #ifdef ALIGNMENT_CHECKS
 		if((offset + ar_name_size) % sizeof(unsigned long) != 0){
 		    archive_member_error(ofile, "offset in archive not "
@@ -1433,15 +1458,22 @@ struct ofile *ofile)
 		ofile->member_type = OFILE_Mach_O;
 		ofile->object_addr = ofile->member_addr;
 		ofile->object_size = ofile->member_size;
-		if(magic == MH_MAGIC)
+		if(magic == MH_MAGIC || magic == MH_MAGIC_64)
 		    ofile->object_byte_sex = host_byte_sex;
 		else
 		    ofile->object_byte_sex =
 			   host_byte_sex == BIG_ENDIAN_BYTE_SEX ?
 			   LITTLE_ENDIAN_BYTE_SEX : BIG_ENDIAN_BYTE_SEX;
+		ofile->is_64bit = (magic == MH_MAGIC_64 ||
+				   magic == SWAP_LONG(MH_MAGIC_64)) ?
+				  TRUE : FALSE;
 		ofile->mh = (struct mach_header *)(ofile->object_addr);
-		ofile->load_commands = (struct load_command *)
-		    (ofile->object_addr + sizeof(struct mach_header));
+		if(ofile->is_64bit)
+		    ofile->load_commands = (struct load_command *)
+			(ofile->object_addr + sizeof(struct mach_header_64));
+		else
+		    ofile->load_commands = (struct load_command *)
+			(ofile->object_addr + sizeof(struct mach_header));
 		if(check_Mach_O(ofile) == CHECK_BAD)
 		    goto cleanup;
 	    }
@@ -1599,7 +1631,8 @@ struct ofile *ofile)
 	    }
 	    else if(size - (offset + ar_name_size) >=
 		    sizeof(struct mach_header) &&
-		    (magic == MH_MAGIC || magic == SWAP_LONG(MH_MAGIC))){
+		    (magic == MH_MAGIC || magic == SWAP_LONG(MH_MAGIC) ||
+		     magic == MH_MAGIC_64 || magic == SWAP_LONG(MH_MAGIC_64))){
 #ifdef ALIGNMENT_CHECKS
 		if((offset + ar_name_size) % sizeof(unsigned long) != 0){
 		    archive_member_error(ofile, "offset in archive not "
@@ -1611,14 +1644,21 @@ struct ofile *ofile)
 		ofile->member_type = OFILE_Mach_O;
 		ofile->object_addr = ofile->member_addr;
 		ofile->object_size = ofile->member_size;
-		if(magic == MH_MAGIC)
+		if(magic == MH_MAGIC || magic == MH_MAGIC_64)
 		    ofile->object_byte_sex = host_byte_sex;
 		else
 		    ofile->object_byte_sex =
 			   host_byte_sex == BIG_ENDIAN_BYTE_SEX ?
 			   LITTLE_ENDIAN_BYTE_SEX : BIG_ENDIAN_BYTE_SEX;
+		ofile->is_64bit = (magic == MH_MAGIC_64 ||
+				   magic == SWAP_LONG(MH_MAGIC_64)) ?
+				  TRUE : FALSE;
 		ofile->mh = (struct mach_header *)ofile->object_addr;
-		ofile->load_commands = (struct load_command *)
+		if(ofile->is_64bit)
+		    ofile->load_commands = (struct load_command *)
+			   (ofile->object_addr + sizeof(struct mach_header_64));
+		else
+		    ofile->load_commands = (struct load_command *)
 			   (ofile->object_addr + sizeof(struct mach_header));
 		if(check_Mach_O(ofile) == CHECK_BAD)
 		    goto cleanup;
@@ -1788,7 +1828,8 @@ struct ofile *ofile)
 		    }
 		    else if(size - (offset + ar_name_size) >=
 			    sizeof(struct mach_header) &&
-			   (magic == MH_MAGIC || magic == SWAP_LONG(MH_MAGIC))){
+			   (magic == MH_MAGIC || magic == SWAP_LONG(MH_MAGIC) ||
+			    magic == MH_MAGIC_64 || magic == SWAP_LONG(MH_MAGIC_64))){
 #ifdef ALIGNMENT_CHECKS
 			if((offset + ar_name_size) %sizeof(unsigned long) != 0){
 			    archive_member_error(ofile, "offset in archive not "
@@ -1800,15 +1841,22 @@ struct ofile *ofile)
 			ofile->member_type = OFILE_Mach_O;
 			ofile->object_addr = ofile->member_addr;
 			ofile->object_size = ofile->member_size;
-			if(magic == MH_MAGIC)
+			if(magic == MH_MAGIC || magic == MH_MAGIC_64)
 			    ofile->object_byte_sex = host_byte_sex;
 			else
 			    ofile->object_byte_sex =
 				   host_byte_sex == BIG_ENDIAN_BYTE_SEX ?
 				   LITTLE_ENDIAN_BYTE_SEX : BIG_ENDIAN_BYTE_SEX;
+			ofile->is_64bit = (magic == MH_MAGIC_64 ||
+					   magic == SWAP_LONG(MH_MAGIC_64)) ?
+					  TRUE : FALSE;
 			ofile->mh = (struct mach_header *)ofile->object_addr;
-			ofile->load_commands = (struct load_command *)
-			    (ofile->object_addr + sizeof(struct mach_header));
+			if(ofile->is_64bit)
+			    ofile->load_commands = (struct load_command *)
+				(ofile->object_addr + sizeof(struct mach_header_64));
+			else
+			    ofile->load_commands = (struct load_command *)
+				(ofile->object_addr + sizeof(struct mach_header));
 			if(check_Mach_O(ofile) == CHECK_BAD)
 			    goto cleanup;
 		    }
@@ -2249,7 +2297,8 @@ struct ofile *ofile)
 		   ofile->file_addr + ofile->member_offset +
 			ofile->fat_archs[i].offset,
 		   sizeof(unsigned long));
-	    if(magic != MH_MAGIC && magic != SWAP_LONG(MH_MAGIC)){
+	    if(magic != MH_MAGIC && magic != SWAP_LONG(MH_MAGIC) &&
+	       magic != MH_MAGIC_64 && magic != SWAP_LONG(MH_MAGIC_64)){
 		archive_member_error(ofile, "fat file for cputype (%d) "
 			"cpusubtype (%d) is not an object file (bad magic "
 			"number)", ofile->fat_archs[i].cputype,
@@ -2300,6 +2349,9 @@ enum bool archives_with_fat_objects)
     enum byte_sex host_byte_sex;
     enum bool swapped;
     struct mach_header mh;
+    struct mach_header_64 mh64;
+    cpu_type_t cputype;
+    cpu_subtype_t cpusubtype;
     struct ar_hdr *ar_hdr;
     unsigned long ar_name_size;
 
@@ -2396,17 +2448,33 @@ enum bool archives_with_fat_objects)
 			    swapped = TRUE;
 			    swap_mach_header(&mh, host_byte_sex);
 			}
-			swapped = FALSE;
+			else
+			    swapped = FALSE;
+			cputype = mh.cputype;
+			cpusubtype = mh.cpusubtype;
 		    }
-		    if(magic == MH_MAGIC){
-			if(ofile->archive_cputype == 0){
-			    ofile->archive_cputype = mh.cputype;
-			    ofile->archive_cpusubtype = mh.cpusubtype;
+		    else if(size - offset >= sizeof(struct mach_header_64) &&
+		       (magic == MH_MAGIC_64 || magic == SWAP_LONG(MH_MAGIC_64))){
+			memcpy(&mh64, addr + offset, sizeof(struct mach_header_64));
+			if(magic == SWAP_LONG(MH_MAGIC_64)){
+			    magic = MH_MAGIC_64;
+			    swapped = TRUE;
+			    swap_mach_header_64(&mh64, host_byte_sex);
 			}
-			else if(ofile->archive_cputype != mh.cputype){
+			else
+			    swapped = FALSE;
+			cputype = mh64.cputype;
+			cpusubtype = mh64.cpusubtype;
+		    }
+		    if(magic == MH_MAGIC || magic == MH_MAGIC_64){
+			if(ofile->archive_cputype == 0){
+			    ofile->archive_cputype = cputype;
+			    ofile->archive_cpusubtype = cpusubtype;
+			}
+			else if(ofile->archive_cputype != cputype){
 			    archive_member_error(ofile, "cputype (%d) does not "
 				"match previous archive members cputype (%d) "
-				"(all members must match)", mh.cputype,
+				"(all members must match)", cputype,
 				ofile->archive_cputype);
 			}
 		    }
@@ -2494,7 +2562,9 @@ struct ofile *ofile)
     struct mach_header *mh;
     struct load_command *load_commands, *lc, l;
     struct segment_command *sg;
+    struct segment_command_64 *sg64;
     struct section *s;
+    struct section_64 *s64;
     struct symtab_command *st;
     struct dysymtab_command *dyst;
     struct symseg_command *ss;
@@ -2514,12 +2584,25 @@ struct ofile *ofile)
 	host_byte_sex = get_host_byte_sex();
 	swapped = (enum bool)(host_byte_sex != ofile->object_byte_sex);
 
-	if(swapped)
-	    swap_mach_header(mh, host_byte_sex);
-	if(mh->sizeofcmds + sizeof(struct mach_header) > size){
-	    Mach_O_error(ofile, "truncated or malformed object (load commands "
-			 "extend past the end of the file)");
-	    return(CHECK_BAD);
+	if(swapped){
+	    if(ofile->is_64bit)
+		swap_mach_header_64((struct mach_header_64 *)mh, host_byte_sex);
+	    else
+		swap_mach_header(mh, host_byte_sex);
+	}
+	if(ofile->is_64bit){
+	    if(mh->sizeofcmds + sizeof(struct mach_header_64) > size){
+		Mach_O_error(ofile, "truncated or malformed object (load commands "
+			     "extend past the end of the file)");
+		return(CHECK_BAD);
+	    }
+	}
+	else{
+	    if(mh->sizeofcmds + sizeof(struct mach_header) > size){
+		Mach_O_error(ofile, "truncated or malformed object (load commands "
+			     "extend past the end of the file)");
+		return(CHECK_BAD);
+	    }
 	}
 	if(ofile->file_type == OFILE_FAT){
 	    if(ofile->fat_archs[ofile->narch].cputype != ofile->mh->cputype)
@@ -2617,6 +2700,71 @@ struct ofile *ofile)
 			return(CHECK_BAD);
 		    }
 		    s++;
+		}
+		break;
+
+	    case LC_SEGMENT_64:
+		sg64 = (struct segment_command_64 *)lc;
+		if(swapped)
+		    swap_segment_command_64(sg64, host_byte_sex);
+		if(sg64->cmdsize != sizeof(struct segment_command_64) +
+				     sg64->nsects * sizeof(struct section_64)){
+		    Mach_O_error(ofile, "malformed object (inconsistant cmdsize"
+				 "in LC_SEGMENT_64 command %lu for the number of "
+				 "sections)", i);
+		    return(CHECK_BAD);
+		}
+		if(sg64->fileoff > size){
+		    Mach_O_error(ofile, "truncated or malformed object "
+				 "(LC_SEGMENT_64 command %lu fileoff field extends"
+				 " past the end of the file)", i);
+		    return(CHECK_BAD);
+		}
+		if(sg64->fileoff + sg64->filesize > size){
+		    Mach_O_error(ofile, "truncated or malformed object "
+				 "(LC_SEGMENT_64 command %lu fileoff field plus "
+				 "filesize field extends past the end of the "
+				 "file)", i);
+		    return(CHECK_BAD);
+		}
+		s64 = (struct section_64 *)
+		    ((char *)sg64 + sizeof(struct segment_command_64));
+		if(swapped)
+		    swap_section_64(s64, sg64->nsects, host_byte_sex);
+		for(j = 0 ; j < sg64->nsects ; j++){
+		    if((s64->flags & SECTION_TYPE) != S_ZEROFILL &&
+		       s64->offset > size){
+			Mach_O_error(ofile, "truncated or malformed object "
+				"(offset field of section %lu in LC_SEGMENT_64 "
+				"command %lu extends past the end of the file)",
+				j, i);
+			return(CHECK_BAD);
+		    }
+		    if((s64->flags & SECTION_TYPE) != S_ZEROFILL &&
+		       s64->offset + s64->size > size){
+			Mach_O_error(ofile, "truncated or malformed object "
+				"(offset field plus size field of section %lu "
+				"in LC_SEGMENT_64 command %lu extends past the "
+				"end of the file)", j, i);
+			return(CHECK_BAD);
+		    }
+		    if(s64->reloff > size){
+			Mach_O_error(ofile, "truncated or malformed object "
+				"(reloff field of section %lu in LC_SEGMENT_64 "
+				"command %lu extends past the end of the file)",
+				j, i);
+			return(CHECK_BAD);
+		    }
+		    if(s64->reloff + s64->nreloc * sizeof(struct relocation_info) >
+		       size){
+			Mach_O_error(ofile, "truncated or malformed object "
+				"(reloff field plus nreloc field times sizeof("
+				"struct relocation_info) of section %lu in "
+				"LC_SEGMENT_64 command %lu extends past the end "
+				"of the file)", j, i);
+			return(CHECK_BAD);
+		    }
+		    s64++;
 		}
 		break;
 
