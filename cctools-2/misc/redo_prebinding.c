@@ -1978,6 +1978,9 @@ void)
 	case CPU_TYPE_I386:
 	    update_generic_external_relocs();
 	    break;
+	case CPU_TYPE_VAX:
+	    update_generic_external_relocs();
+	    break;
 	case CPU_TYPE_HPPA:
 	    update_hppa_external_relocs();
 	    break;

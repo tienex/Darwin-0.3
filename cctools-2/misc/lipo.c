@@ -1506,6 +1506,15 @@ struct fat_arch *fat_arch)
 		goto print_arch_unknown;
 	    }
 	    break;
+	case CPU_TYPE_VAX:
+	    switch(fat_arch->cpusubtype){
+	    case CPU_SUBTYPE_VAX_ALL:
+		printf("vax");
+		break;
+	    default:
+		goto print_arch_unknown;
+	    }
+	    break;
 	case CPU_TYPE_ANY:
 	    switch(fat_arch->cpusubtype){
 	    case CPU_SUBTYPE_MULTIPLE:
@@ -1678,6 +1687,16 @@ cpu_subtype_t cpusubtype)
 	    case CPU_SUBTYPE_SPARC_ALL:
 		printf("    cputype CPU_TYPE_SPARC\n"
 		       "    cpusubtype CPU_SUBTYPE_SPARC_ALL\n");
+		break;
+	    default:
+		goto print_arch_unknown;
+	    }
+	    break;
+	case CPU_TYPE_VAX:
+	    switch(cpusubtype){
+	    case CPU_SUBTYPE_VAX_ALL:
+		printf("    cputype CPU_TYPE_VAX\n"
+		       "    cpusubtype CPU_SUBTYPE_VAX_ALL\n");
 		break;
 	    default:
 		goto print_arch_unknown;
