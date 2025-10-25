@@ -51,12 +51,43 @@
 #include <vm/vm_kern.h>
 
 /*
- * Stub for machine-specific initialization
+ * Early kernel initialization
+ *
+ * Called from start.s with boot_args pointer
+ */
+void
+mmix_init(struct boot_args *args)
+{
+	extern void exception_init(void);
+	extern void pmap_bootstrap(unsigned long long, vm_offset_t *);
+	extern void machine_startup(void);
+
+	/* Save boot arguments */
+	/* TODO: Store args in global variable */
+
+	/* Initialize exception handling */
+	exception_init();
+
+	/* Initialize virtual memory */
+	vm_offset_t first_avail = args->phys_base + 0x01000000; /* 16MB */
+	pmap_bootstrap(args->phys_mem_size, &first_avail);
+
+	/* Continue with machine-independent initialization */
+	machine_startup();
+}
+
+/*
+ * Machine-specific initialization
  */
 void
 machine_startup(void)
 {
-	/* MMIX-specific startup code would go here */
+	/* MMIX-specific startup code */
+	printf("MMIX Darwin kernel starting...\n");
+
+	/* Initialize console */
+	/* Initialize devices */
+	/* Start scheduler */
 }
 
 /*
