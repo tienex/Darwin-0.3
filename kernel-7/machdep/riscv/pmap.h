@@ -81,7 +81,7 @@
  * RISC-V pmap structure
  */
 struct pmap {
-	vm_offset_t     pm_pdir;        /* Page directory base */
+	vm_offset_t     pm_pdir;        /* Page directory base (physical address) */
 	int             pm_count;       /* Reference count */
 	simple_lock_data_t pm_lock;     /* Lock for this pmap */
 	struct pmap_statistics pm_stats; /* Statistics */
@@ -90,6 +90,20 @@ struct pmap {
 typedef struct pmap *pmap_t;
 
 #define PMAP_NULL       ((pmap_t) 0)
+
+/*
+ * Physical to kernel virtual address translation
+ * Assumes direct-mapped kernel space
+ */
+#if defined(__riscv_xlen) && __riscv_xlen == 64
+#define PHYS_TO_KERNEL(pa)  ((pa) + 0xFFFFFFE000000000UL)
+#define KERNEL_TO_PHYS(va)  ((va) - 0xFFFFFFE000000000UL)
+#define SATP_PPN_MASK       0x00000FFFFFFFFFFFULL
+#else
+#define PHYS_TO_KERNEL(pa)  ((pa) + 0xC0000000UL)
+#define KERNEL_TO_PHYS(va)  ((va) - 0xC0000000UL)
+#define SATP_PPN_MASK       0x003FFFFFUL
+#endif
 
 /*
  * Physical map kernel data structure
