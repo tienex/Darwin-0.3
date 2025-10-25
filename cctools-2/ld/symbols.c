@@ -2880,6 +2880,8 @@ output_local_symbols(void)
     unsigned long i, flush_symbol_offset, output_nsyms,
 	    flush_string_offset, start_string_size, section_type;
     struct nlist *object_symbols, *nlist;
+    struct nlist_64 *object_symbols_64, *nlist_64;
+    enum bool output_64bit;
     char *object_strings, *string;
 
 	/* If no symbols are not to appear in the output file just return */
@@ -2900,19 +2902,43 @@ output_local_symbols(void)
 	    return;
 #endif RLD
 
-	/* setup pointers to the symbol table and string table */
-	object_symbols = (struct nlist *)(cur_obj->obj_addr +
-					  cur_obj->symtab->symoff);
-	object_strings = (char *)(cur_obj->obj_addr + cur_obj->symtab->stroff);
+	/* Determine if we're generating 64-bit output */
+	output_64bit = (output_mach_header.magic == MH_MAGIC_64);
 
-	flush_symbol_offset = output_symtab_info.symtab_command.symoff +
-			      cur_obj->ilocalsym * sizeof(struct nlist);
+	/* setup pointers to the symbol table and string table */
+	object_strings = (char *)(cur_obj->obj_addr + cur_obj->symtab->stroff);
+	if(cur_obj->is_64bit){
+	    object_symbols_64 = (struct nlist_64 *)(cur_obj->obj_addr +
+						     cur_obj->symtab->symoff);
+	    object_symbols = NULL;
+	}
+	else{
+	    object_symbols = (struct nlist *)(cur_obj->obj_addr +
+					      cur_obj->symtab->symoff);
+	    object_symbols_64 = NULL;
+	}
+
+	if(output_64bit){
+	    flush_symbol_offset = output_symtab_info.symtab_command.symoff +
+				  cur_obj->ilocalsym * sizeof(struct nlist_64);
+	}
+	else{
+	    flush_symbol_offset = output_symtab_info.symtab_command.symoff +
+				  cur_obj->ilocalsym * sizeof(struct nlist);
+	}
 	flush_string_offset = output_symtab_info.symtab_command.stroff +
 			      output_symtab_info.output_local_strsize;
 	start_string_size = output_symtab_info.output_local_strsize;
 
 	output_nsyms = 0;
-	nlist = (struct nlist *)(output_addr + flush_symbol_offset);
+	if(output_64bit){
+	    nlist_64 = (struct nlist_64 *)(output_addr + flush_symbol_offset);
+	    nlist = NULL;
+	}
+	else{
+	    nlist = (struct nlist *)(output_addr + flush_symbol_offset);
+	    nlist_64 = NULL;
+	}
 	/* If we are creating section object symbols, create one if needed */
 	if(sect_object_symbols.ms != NULL){
 	    /*
@@ -2955,16 +2981,36 @@ output_local_symbols(void)
 	}
 
 	for(i = 0; i < cur_obj->symtab->nsyms; i++){
+	    unsigned char sym_type, sym_sect;
+	    unsigned long sym_strx;
+	    unsigned long long sym_value;
+	    unsigned short sym_desc;
+
+	    /* Extract symbol fields from input (32-bit or 64-bit) */
+	    if(cur_obj->is_64bit){
+		sym_type = object_symbols_64[i].n_type;
+		sym_sect = object_symbols_64[i].n_sect;
+		sym_strx = object_symbols_64[i].n_un.n_strx;
+		sym_value = object_symbols_64[i].n_value;
+		sym_desc = object_symbols_64[i].n_desc;
+	    }
+	    else{
+		sym_type = object_symbols[i].n_type;
+		sym_sect = object_symbols[i].n_sect;
+		sym_strx = object_symbols[i].n_un.n_strx;
+		sym_value = object_symbols[i].n_value;
+		sym_desc = object_symbols[i].n_desc;
+	    }
+
 	    /*
 	     * If this is a local symbol and it is to be in the output file then
 	     * copy it and it's string into the output file and relocate the
 	     * symbol.
 	     */
-	    if((object_symbols[i].n_type & N_EXT) == 0 && 
+	    if((sym_type & N_EXT) == 0 &&
 	       (strip_level == STRIP_NONE ||
-	        is_output_local_symbol(object_symbols[i].n_type,
-		    object_symbols[i].n_un.n_strx == 0 ? "" :
-		    object_strings + object_symbols[i].n_un.n_strx))){
+	        is_output_local_symbol(sym_type,
+		    sym_strx == 0 ? "" : object_strings + sym_strx))){
 
 		/*
 		 * If symbols were removed from this object when merging
@@ -2972,23 +3018,64 @@ output_local_symbols(void)
 		 * was removed.  If so continue and don't put out this symbol.
 		 */
 		if(cur_obj->symbols_removed == TRUE &&
-		   (object_symbols[i].n_type & N_TYPE) == N_SECT){
-		    section_type = (cur_obj->section_maps[object_symbols[i].
-				    n_sect - 1].s->flags) & SECTION_TYPE;
+		   (sym_type & N_TYPE) == N_SECT){
+		    section_type = (cur_obj->section_maps[sym_sect - 1].s->flags)
+				   & SECTION_TYPE;
 		    if((section_type == S_NON_LAZY_SYMBOL_POINTERS ||
 		        section_type == S_LAZY_SYMBOL_POINTERS ||
 		        section_type == S_SYMBOL_STUBS) &&
 		       fine_reloc_offset_in_output(
-			   &(cur_obj->section_maps[object_symbols[i].n_sect-1]),
-			   object_symbols[i].n_value - 
-			   cur_obj->section_maps[object_symbols[i].n_sect - 1].
-			   s->addr) == FALSE)
+			   &(cur_obj->section_maps[sym_sect-1]),
+			   sym_value -
+			   cur_obj->section_maps[sym_sect - 1].s->addr) == FALSE)
 			continue;
 		}
 
-		/* copy the nlist to the output file */
-		*nlist = object_symbols[i];
-		relocate_symbol(nlist, cur_obj);
+		/* Copy symbol to output file with format conversion if needed */
+		if(!cur_obj->is_64bit && !output_64bit){
+		    /* 32-bit input → 32-bit output: direct copy */
+		    *nlist = object_symbols[i];
+		    relocate_symbol(nlist, cur_obj);
+		}
+		else if(cur_obj->is_64bit && output_64bit){
+		    /* 64-bit input → 64-bit output: direct copy */
+		    *nlist_64 = object_symbols_64[i];
+		    /* relocate_symbol expects nlist*, create temp for relocation */
+		    struct nlist temp_nlist;
+		    temp_nlist.n_un.n_strx = nlist_64->n_un.n_strx;
+		    temp_nlist.n_type = nlist_64->n_type;
+		    temp_nlist.n_sect = nlist_64->n_sect;
+		    temp_nlist.n_desc = nlist_64->n_desc;
+		    temp_nlist.n_value = (unsigned long)nlist_64->n_value;
+		    relocate_symbol(&temp_nlist, cur_obj);
+		    /* Copy back relocated values */
+		    nlist_64->n_un.n_strx = temp_nlist.n_un.n_strx;
+		    nlist_64->n_sect = temp_nlist.n_sect;
+		    nlist_64->n_value = temp_nlist.n_value;
+		}
+		else if(!cur_obj->is_64bit && output_64bit){
+		    /* 32-bit input → 64-bit output: convert */
+		    nlist_64->n_un.n_strx = object_symbols[i].n_un.n_strx;
+		    nlist_64->n_type = object_symbols[i].n_type;
+		    nlist_64->n_sect = object_symbols[i].n_sect;
+		    nlist_64->n_desc = object_symbols[i].n_desc;
+		    nlist_64->n_value = object_symbols[i].n_value;
+		    /* Relocate using temp nlist */
+		    struct nlist temp_nlist = object_symbols[i];
+		    relocate_symbol(&temp_nlist, cur_obj);
+		    nlist_64->n_un.n_strx = temp_nlist.n_un.n_strx;
+		    nlist_64->n_sect = temp_nlist.n_sect;
+		    nlist_64->n_value = temp_nlist.n_value;
+		}
+		else{
+		    /* 64-bit input → 32-bit output: convert with truncation */
+		    nlist->n_un.n_strx = object_symbols_64[i].n_un.n_strx;
+		    nlist->n_type = object_symbols_64[i].n_type;
+		    nlist->n_sect = object_symbols_64[i].n_sect;
+		    nlist->n_desc = object_symbols_64[i].n_desc;
+		    nlist->n_value = (unsigned long)object_symbols_64[i].n_value;
+		    relocate_symbol(nlist, cur_obj);
+		}
 #ifdef RLD
 		/*
 		 * Now change the section number of this symbol to the section
@@ -2997,32 +3084,48 @@ output_local_symbols(void)
 		 * not in the merged symbol table.  relocate_symbol() does not
 		 * modify n_sect for RLD.
 		 */
-		if(nlist->n_sect != NO_SECT)
-		    nlist->n_sect = cur_obj->section_maps[nlist->n_sect - 1].
-				    output_section->output_sectnum;
+		if(output_64bit){
+		    if(nlist_64->n_sect != NO_SECT)
+			nlist_64->n_sect = cur_obj->section_maps[nlist_64->n_sect - 1].
+					    output_section->output_sectnum;
+		}
+		else{
+		    if(nlist->n_sect != NO_SECT)
+			nlist->n_sect = cur_obj->section_maps[nlist->n_sect - 1].
+					output_section->output_sectnum;
+		}
 #endif RLD
 
 		if(strip_level == STRIP_NONE){
-		    nlist->n_un.n_strx += output_symtab_info.
-					  output_local_strsize;
+		    if(output_64bit)
+			nlist_64->n_un.n_strx += output_symtab_info.
+						  output_local_strsize;
+		    else
+			nlist->n_un.n_strx += output_symtab_info.
+					      output_local_strsize;
 		}
 		else{
 		    /* copy the string to the output file (if it has one) */
-		    if(object_symbols[i].n_un.n_strx != 0){
-			nlist->n_un.n_strx = output_symtab_info.
-					     output_local_strsize;
+		    if(sym_strx != 0){
+			if(output_64bit)
+			    nlist_64->n_un.n_strx = output_symtab_info.
+						     output_local_strsize;
+			else
+			    nlist->n_un.n_strx = output_symtab_info.
+						  output_local_strsize;
 			string = output_addr +
 				 output_symtab_info.symtab_command.stroff +
 				 output_symtab_info.output_local_strsize;
-			strcpy(string,
-			       object_strings + object_symbols[i].n_un.n_strx);
+			strcpy(string, object_strings + sym_strx);
 			output_symtab_info.output_local_strsize +=
-				      strlen(object_strings +
-					     object_symbols[i].n_un.n_strx) + 1;
+				      strlen(object_strings + sym_strx) + 1;
 		    }
 		}
 		output_nsyms++;
-		nlist++;
+		if(output_64bit)
+		    nlist_64++;
+		else
+		    nlist++;
 	    }
 	}
 	if(strip_level == STRIP_NONE){
