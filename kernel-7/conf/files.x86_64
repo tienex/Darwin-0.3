@@ -8,25 +8,50 @@ bsd/dev/vol.c			optional vol
 # x86_64 machine-dependent files
 # Core machine-dependent implementations
 
+# Assembly startup and low-level code
+machdep/x86_64/start.s		standard
+machdep/x86_64/locore.s		standard
+machdep/x86_64/cswtch.s		standard
+
+# Initialization and configuration
+machdep/x86_64/x86_64_init.c	standard
 machdep/x86_64/machdep.c	standard
+
+# Descriptor tables
+machdep/x86_64/gdt.c		standard
+machdep/x86_64/idt.c		standard
+
+# Memory management
 machdep/x86_64/pmap.c		standard
+machdep/x86_64/vm_machdep.c	standard
+
+# Trap and exception handling
 machdep/x86_64/trap.c		standard
+
+# Process/thread management
 machdep/x86_64/pcb.c		standard
 
-# BSD layer device support
+# System call interface
+machdep/x86_64/sys_machdep.c	standard
 
+# BSD layer device support
 bsd/dev/x86_64/conf.c		standard
 bsd/dev/x86_64/cons.c		standard
 
-# Note: This is a basic x86-64 implementation with stub functions.
-# Full implementation would require:
-# - Startup/bootstrap code (start.s, locore.s)
-# - IDT/GDT management (idt.c, gdt.c)
-# - Interrupt handling (intr.c)
-# - I/O primitives (io_prim.c)
-# - Memory management helpers (vm_machdep.c)
-# - FPU/SSE support (fp_support.c, fpu.s)
-# - System call interface (machdep_call.c, sys_machdep.c)
-# - Context switching (cswtch.s)
+# Note: This x86-64 implementation now includes:
+# ✓ Startup code (start.s, locore.s)
+# ✓ Low-level assembly routines (locore.s)
+# ✓ Context switching (cswtch.s)
+# ✓ IDT/GDT management (idt.c, gdt.c)
+# ✓ Memory management (pmap.c, vm_machdep.c)
+# ✓ System call interface (sys_machdep.c)
+# ✓ Exception/interrupt handling (trap.c)
+# ✓ CPU initialization (x86_64_init.c)
+#
+# Still needed for complete implementation:
+# - Full page table implementation (4-level paging)
 # - APIC/interrupt controller support
-# - Device drivers
+# - Complete FPU/SSE/AVX state management
+# - SMP support
+# - Device drivers (keyboard, display, disk, network)
+# - Power management (ACPI)
