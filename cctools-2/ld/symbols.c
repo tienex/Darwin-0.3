@@ -596,8 +596,10 @@ merge_symbols(void)
 {
     unsigned long i, j, object_undefineds, nrefsym;
     struct nlist *object_symbols;
+    struct nlist_64 *object_symbols_64;
     char *object_strings;
     struct merged_symbol **hash_pointer, *merged_symbol;
+    struct nlist symbol_buffer;  /* For converting nlist_64 to nlist */
 
 #if defined(DEBUG) || defined(RLD)
 	/* The compiler "warning: `merged_symbol' may be used uninitialized */
@@ -610,12 +612,26 @@ merge_symbols(void)
 	    return;
 
 	/* setup pointers to the symbol table and string table */
-	object_symbols = (struct nlist *)(cur_obj->obj_addr +
-					  cur_obj->symtab->symoff);
 	object_strings = (char *)(cur_obj->obj_addr + cur_obj->symtab->stroff);
-	if(cur_obj->swapped &&
-	   ((struct mach_header *)cur_obj->obj_addr)->filetype != MH_DYLIB)
-	    swap_nlist(object_symbols, cur_obj->symtab->nsyms, host_byte_sex);
+
+	/* Handle 64-bit vs 32-bit symbol tables */
+	if(cur_obj->is_64bit){
+	    object_symbols_64 = (struct nlist_64 *)(cur_obj->obj_addr +
+						    cur_obj->symtab->symoff);
+	    object_symbols = NULL;
+	    if(cur_obj->swapped &&
+	       ((struct mach_header_64 *)cur_obj->obj_addr)->filetype != MH_DYLIB)
+		swap_nlist_64(object_symbols_64, cur_obj->symtab->nsyms,
+			      host_byte_sex);
+	}
+	else{
+	    object_symbols = (struct nlist *)(cur_obj->obj_addr +
+					      cur_obj->symtab->symoff);
+	    object_symbols_64 = NULL;
+	    if(cur_obj->swapped &&
+	       ((struct mach_header *)cur_obj->obj_addr)->filetype != MH_DYLIB)
+		swap_nlist(object_symbols, cur_obj->symtab->nsyms, host_byte_sex);
+	}
 
 
 	/*
@@ -631,7 +647,7 @@ merge_symbols(void)
 	/*
 	 * If this object is not the base file count the number of undefined
 	 * externals and commons in this object so that an undefined external
-	 * map for this object can be allocated and then it will be filled in 
+	 * map for this object can be allocated and then it will be filled in
 	 * as these undefined external symbols are looked up in the merged
 	 * symbol table.  This map will be used when doing relocation for
 	 * external relocation entries in pass2 (and is not needed for the base
@@ -639,20 +655,41 @@ merge_symbols(void)
 	 */
 	object_undefineds = 0;
 	for(i = 0; i < cur_obj->symtab->nsyms; i++){
-	    check_symbol(&(object_symbols[i]), object_strings, i);
-	    if(errors)
-		return;
-	    if(object_symbols[i].n_type == (N_EXT | N_UNDF))
-		object_undefineds++;
-	    /*
-	     * If this is a private external increment the count of
-	     * private exterals for this object and the total in the
-	     * output file.
-	     */
-	    if((object_symbols[i].n_type & N_EXT) &&
-	       (object_symbols[i].n_type & N_PEXT)){
-		cur_obj->nprivatesym++;
-		nmerged_private_symbols++;
+	    /* Convert nlist_64 to nlist if necessary for check_symbol */
+	    if(cur_obj->is_64bit){
+		symbol_buffer.n_un.n_strx = object_symbols_64[i].n_un.n_strx;
+		symbol_buffer.n_type = object_symbols_64[i].n_type;
+		symbol_buffer.n_sect = object_symbols_64[i].n_sect;
+		symbol_buffer.n_desc = object_symbols_64[i].n_desc;
+		/* n_value truncated to 32-bit for validation */
+		symbol_buffer.n_value = (unsigned long)object_symbols_64[i].n_value;
+		check_symbol(&symbol_buffer, object_strings, i);
+		if(errors)
+		    return;
+		if(object_symbols_64[i].n_type == (N_EXT | N_UNDF))
+		    object_undefineds++;
+		if((object_symbols_64[i].n_type & N_EXT) &&
+		   (object_symbols_64[i].n_type & N_PEXT)){
+		    cur_obj->nprivatesym++;
+		    nmerged_private_symbols++;
+		}
+	    }
+	    else{
+		check_symbol(&(object_symbols[i]), object_strings, i);
+		if(errors)
+		    return;
+		if(object_symbols[i].n_type == (N_EXT | N_UNDF))
+		    object_undefineds++;
+		/*
+		 * If this is a private external increment the count of
+		 * private exterals for this object and the total in the
+		 * output file.
+		 */
+		if((object_symbols[i].n_type & N_EXT) &&
+		   (object_symbols[i].n_type & N_PEXT)){
+		    cur_obj->nprivatesym++;
+		    nmerged_private_symbols++;
+		}
 	    }
 	}
 	if(cur_obj != base_obj){
@@ -671,10 +708,18 @@ merge_symbols(void)
 	 */
 	if(filetype == MH_DYLIB){
 	    for(i = 0; i < cur_obj->symtab->nsyms; i++){
-		if((object_symbols[i].n_type & N_EXT) == N_EXT &&
-		   (object_symbols[i].n_type & N_PEXT) != N_PEXT &&
-		   (object_symbols[i].n_type & N_TYPE) != N_UNDF)
-			cur_obj->nextdefsym++;
+		if(cur_obj->is_64bit){
+		    if((object_symbols_64[i].n_type & N_EXT) == N_EXT &&
+		       (object_symbols_64[i].n_type & N_PEXT) != N_PEXT &&
+		       (object_symbols_64[i].n_type & N_TYPE) != N_UNDF)
+			    cur_obj->nextdefsym++;
+		}
+		else{
+		    if((object_symbols[i].n_type & N_EXT) == N_EXT &&
+		       (object_symbols[i].n_type & N_PEXT) != N_PEXT &&
+		       (object_symbols[i].n_type & N_TYPE) != N_UNDF)
+			    cur_obj->nextdefsym++;
+		}
 	    }
 	    if(cur_obj->nprivatesym != 0 && cur_obj->nextdefsym != 0)
 		error_with_cur_obj("object can't contain both private external "
@@ -753,15 +798,27 @@ merge_symbols(void)
 	nrefsym = 0;
 	object_undefineds = 0;
 	for(i = 0; i < cur_obj->symtab->nsyms; i++){
-	    if(object_symbols[i].n_type & N_EXT){
+	    /* Populate symbol_buffer from appropriate source */
+	    if(cur_obj->is_64bit){
+		symbol_buffer.n_un.n_strx = object_symbols_64[i].n_un.n_strx;
+		symbol_buffer.n_type = object_symbols_64[i].n_type;
+		symbol_buffer.n_sect = object_symbols_64[i].n_sect;
+		symbol_buffer.n_desc = object_symbols_64[i].n_desc;
+		symbol_buffer.n_value = (unsigned long)object_symbols_64[i].n_value;
+	    }
+	    else{
+		symbol_buffer = object_symbols[i];
+	    }
+
+	    if(symbol_buffer.n_type & N_EXT){
 		/*
 		 * Do the trace of this symbol if specified.
 		 */
 		if(ntrace_syms != 0){
 		    for(j = 0; j < ntrace_syms; j++){
 			if(strcmp(trace_syms[j], object_strings +
-				  object_symbols[i].n_un.n_strx) == 0){
-			    trace_object_symbol(&(object_symbols[i]),
+				  symbol_buffer.n_un.n_strx) == 0){
+			    trace_object_symbol(&symbol_buffer,
 						object_strings);
 			    break;
 			}
@@ -769,7 +826,7 @@ merge_symbols(void)
 		}
 		/* lookup the symbol and see if it has already been seen */
 		hash_pointer = lookup_symbol(object_strings +
-					     object_symbols[i].n_un.n_strx);
+					     symbol_buffer.n_un.n_strx);
 		if(*hash_pointer == NULL){
 		    /*
 		     * If this is the basefile and the symbol is not a
@@ -777,11 +834,11 @@ merge_symbols(void)
 		     * this symbol into the symbol table.
 		     */
 		    if(cur_obj != base_obj ||
-		       (object_symbols[i].n_type != (N_EXT | N_UNDF) &&
-		        object_symbols[i].n_type != (N_EXT | N_INDR) ) ){
+		       (symbol_buffer.n_type != (N_EXT | N_UNDF) &&
+		        symbol_buffer.n_type != (N_EXT | N_INDR) ) ){
 			/* the symbol has not been seen yet so just enter it */
 			merged_symbol = enter_symbol(hash_pointer,
-					         &(object_symbols[i]),
+					         &symbol_buffer,
 						 object_strings, cur_obj);
 			merged_symbol->referenced_in_non_dylib = TRUE;
 		    }
@@ -798,15 +855,15 @@ merge_symbols(void)
 		    if(merged_symbol->referenced_in_non_dylib == FALSE){
 			merged_symbol->nlist.n_un.n_name =
 			    enter_string(object_strings +
-					 object_symbols[i].n_un.n_strx);
+					 symbol_buffer.n_un.n_strx);
 			merged_symbol->referenced_in_non_dylib = TRUE;
 		    }
 		    /*
 		     * If the object's symbol was undefined ignore it and just
 		     * use the merged symbol.
 		     */
-		    if(object_symbols[i].n_type == (N_EXT | N_UNDF) &&
-		       object_symbols[i].n_value == 0){
+		    if(symbol_buffer.n_type == (N_EXT | N_UNDF) &&
+		       symbol_buffer.n_value == 0){
 			/*
 			 * If the merged symbol was a lazy reference and the
 			 * object's symbol is not then remove the lazy reference
@@ -815,9 +872,9 @@ merge_symbols(void)
 			if(((merged_symbol->nlist.n_type == (N_EXT | N_UNDF) &&
 			     merged_symbol->nlist.n_value == 0) ||
 			     merged_symbol->nlist.n_type == (N_EXT | N_PBUD)) &&
-			   (merged_symbol->nlist.n_desc & REFERENCE_TYPE) == 
+			   (merged_symbol->nlist.n_desc & REFERENCE_TYPE) ==
 			    REFERENCE_FLAG_UNDEFINED_LAZY &&
-			   (object_symbols[i].n_desc & REFERENCE_TYPE) !=
+			   (symbol_buffer.n_desc & REFERENCE_TYPE) !=
 			    REFERENCE_FLAG_UNDEFINED_LAZY)
 			    merged_symbol->nlist.n_desc =
 			       (merged_symbol->nlist.n_desc & ~REFERENCE_TYPE) |
@@ -828,13 +885,13 @@ merge_symbols(void)
 			 * REFERENCED_DYNAMICALLY keep this mark.
 			 */
 			merged_symbol->nlist.n_desc |=
-			   (object_symbols[i].n_desc & REFERENCED_DYNAMICALLY);
+			   (symbol_buffer.n_desc & REFERENCED_DYNAMICALLY);
 		    }
 		    /*
 		     * See if the object's symbol is a common.
 		     */
-		    else if(object_symbols[i].n_type == (N_EXT | N_UNDF) &&
-			    object_symbols[i].n_value != 0){
+		    else if(symbol_buffer.n_type == (N_EXT | N_UNDF) &&
+			    symbol_buffer.n_value != 0){
 			/*
 			 * See if the merged symbol is a common or undefined.
 			 */
@@ -845,16 +902,16 @@ merge_symbols(void)
 			     * a common so use the common symbol.
 			     */
 			    if(merged_symbol->nlist.n_value != 0){
-				if(object_symbols[i].n_value >
+				if(symbol_buffer.n_value >
 				   merged_symbol->nlist.n_value){
 				    merged_symbol->nlist.n_value =
-						     object_symbols[i].n_value;
+						     symbol_buffer.n_value;
 				    merged_symbol->definition_object = cur_obj;
 				}
 			    }
 			    else{
 				merged_symbol->nlist.n_value =
-						     object_symbols[i].n_value;
+						     symbol_buffer.n_value;
 				merged_symbol->definition_object = cur_obj;
 			    }
 			}
@@ -876,8 +933,8 @@ merge_symbols(void)
 			 *     merged_symbol->nlist.n_value != 0
 			 * if the above test but that is always true.
 			 */
-			merged_symbol->nlist.n_type = object_symbols[i].n_type;
-			merged_symbol->nlist.n_sect = object_symbols[i].n_sect;
+			merged_symbol->nlist.n_type = symbol_buffer.n_type;
+			merged_symbol->nlist.n_sect = symbol_buffer.n_sect;
 			/*
 			 * If this symbol was previously referenced dynamically
 			 * then keep this information.
@@ -885,18 +942,18 @@ merge_symbols(void)
 			if(merged_symbol->nlist.n_desc &
 			   REFERENCED_DYNAMICALLY)
 			    merged_symbol->nlist.n_desc =
-				object_symbols[i].n_desc |
+				symbol_buffer.n_desc |
 				REFERENCED_DYNAMICALLY;
 			else
 			    merged_symbol->nlist.n_desc =
-				object_symbols[i].n_desc;
+				symbol_buffer.n_desc;
 			if(merged_symbol->nlist.n_type == (N_EXT | N_INDR))
 			    enter_indr_symbol(merged_symbol,
-					      &(object_symbols[i]),
+					      &symbol_buffer,
 					      object_strings, cur_obj);
 			else
 			    merged_symbol->nlist.n_value =
-						      object_symbols[i].n_value;
+						      symbol_buffer.n_value;
 			merged_symbol->definition_object = cur_obj;
 		    }
 		    /*
@@ -917,15 +974,15 @@ merge_symbols(void)
 		     * symbols are absolute symbols and have the same value.
 		     */
 		    else if(merged_symbol->nlist.n_type != (N_EXT | N_ABS) ||
-			    object_symbols[i].n_type != (N_EXT | N_ABS) ||
-			    object_symbols[i].n_value !=
+			    symbol_buffer.n_type != (N_EXT | N_ABS) ||
+			    symbol_buffer.n_value !=
 						  merged_symbol->nlist.n_value){
-			multiply_defined(merged_symbol, &(object_symbols[i]),
+			multiply_defined(merged_symbol, &symbol_buffer,
 					 object_strings);
 		    }
 #else
 		    else
-			multiply_defined(merged_symbol, &(object_symbols[i]),
+			multiply_defined(merged_symbol, &symbol_buffer,
 					 object_strings);
 #endif 0
 		}
@@ -935,7 +992,7 @@ merge_symbols(void)
 		 * merged symbol and its index in the object file's undefined
 		 * map.
 		 */
-		if(object_symbols[i].n_type == (N_EXT | N_UNDF) &&
+		if(symbol_buffer.n_type == (N_EXT | N_UNDF) &&
 		   cur_obj != base_obj){
 		    cur_obj->undefined_maps[object_undefineds].index = i;
 		    cur_obj->undefined_maps[object_undefineds].merged_symbol =
@@ -950,10 +1007,10 @@ merge_symbols(void)
 		if(filetype == MH_DYLIB){
 		    cur_obj->reference_maps[nrefsym].merged_symbol =
 								merged_symbol;
-		    if(object_symbols[i].n_type == (N_EXT | N_UNDF))
+		    if(symbol_buffer.n_type == (N_EXT | N_UNDF))
 			cur_obj->reference_maps[nrefsym].flags =
-				      object_symbols[i].n_desc & REFERENCE_TYPE;
-		    else if(object_symbols[i].n_type & N_PEXT)
+				      symbol_buffer.n_desc & REFERENCE_TYPE;
+		    else if(symbol_buffer.n_type & N_PEXT)
 			cur_obj->reference_maps[nrefsym].flags =
 						 REFERENCE_FLAG_PRIVATE_DEFINED;
 		    else
@@ -968,14 +1025,14 @@ merge_symbols(void)
 		    cur_obj->nlocalsym++;
 		    nlocal_symbols++;
 		}
-		else if(is_output_local_symbol(object_symbols[i].n_type,
-			    object_symbols[i].n_un.n_strx == 0 ? "" :
-			    object_strings + object_symbols[i].n_un.n_strx)){
+		else if(is_output_local_symbol(symbol_buffer.n_type,
+			    symbol_buffer.n_un.n_strx == 0 ? "" :
+			    object_strings + symbol_buffer.n_un.n_strx)){
 		    cur_obj->nlocalsym++;
 		    nlocal_symbols++;
-		    local_string_size += object_symbols[i].n_un.n_strx == 0 ? 0:
+		    local_string_size += symbol_buffer.n_un.n_strx == 0 ? 0:
 					 strlen(object_strings +
-						object_symbols[i].n_un.n_strx)
+						symbol_buffer.n_un.n_strx)
 					 + 1;
 		}
 	    }
