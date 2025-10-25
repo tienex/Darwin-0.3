@@ -1221,7 +1221,1933 @@ int min(int a, int b) {
 }
 ```
 
-## 12. Instruction Encoding Summary
+## 12. ARM-Style Shifter Operand
+
+### Overview
+
+DLX supports ARM-style barrel shifter operands, allowing ALU instructions to perform a shift/rotate on the second source operand in the same cycle. This is transparent at the assembly level and can be mixed with regular instructions.
+
+### Shifter Operand Types
+
+```c
+/* Shifter operand encoding (alternative instruction format) */
+typedef enum {
+    SHIFT_LSL,      /* Logical shift left */
+    SHIFT_LSR,      /* Logical shift right */
+    SHIFT_ASR,      /* Arithmetic shift right */
+    SHIFT_ROR,      /* Rotate right */
+    SHIFT_RRX,      /* Rotate right with extend (33-bit rotate through carry) */
+} shift_type_t;
+```
+
+### Instruction Format with Shifter
+
+```
+Standard Format (no shift):
+┌────────┬────┬────┬────┬────────┬────────┐
+│ Opcode │ Rd │ Rs │ Rt │  Func  │Reserved│
+│   6    │ 5  │ 5  │ 5  │   6    │   5    │
+└────────┴────┴────┴────┴────────┴────────┘
+
+Shifter Format:
+┌────────┬────┬────┬────┬───┬────┬───┬────┐
+│ Opcode │ Rd │ Rs │ Rt │Sh │ShAmt│I│Func│
+│   6    │ 5  │ 5  │ 5  │ 2 │  5  │1│ 3  │
+└────────┴────┴────┴────┴───┴────┴───┴────┘
+
+Sh: Shift type (LSL, LSR, ASR, ROR)
+ShAmt: Shift amount (5-bit: 0-31)
+I: Immediate shift (1) or register shift (0)
+```
+
+### Assembly Syntax
+
+```assembly
+# Basic ALU operations with shifter operand
+
+# Logical shift left
+ADD   r1, r2, r3, LSL #5    # r1 = r2 + (r3 << 5)
+SUB   r4, r5, r6, LSL #2    # r4 = r5 - (r6 << 2)
+AND   r7, r8, r9, LSL r10   # r7 = r8 & (r9 << r10)
+
+# Logical shift right
+ADD   r1, r2, r3, LSR #8    # r1 = r2 + (r3 >> 8)
+OR    r4, r5, r6, LSR #16   # r4 = r5 | (r6 >> 16)
+
+# Arithmetic shift right (sign-extend)
+SUB   r1, r2, r3, ASR #4    # r1 = r2 - (r3 >>> 4)
+CMP   r4, r5, ASR #7        # Compare r4 with (r5 >>> 7)
+
+# Rotate right
+EOR   r1, r2, r3, ROR #12   # r1 = r2 ^ (r3 rotated right 12)
+MOV   r4, r5, ROR #8        # r4 = (r5 rotated right 8)
+
+# Rotate right through extend (33-bit rotate via carry)
+ADC   r1, r2, r3, RRX       # r1 = r2 + (r3 rotated through carry)
+```
+
+### Supported Instructions with Shifter
+
+```assembly
+# All ALU instructions support shifter operand:
+
+# Arithmetic
+ADD   rd, rs, rt, <shift>
+SUB   rd, rs, rt, <shift>
+ADC   rd, rs, rt, <shift>   # Add with carry
+SBC   rd, rs, rt, <shift>   # Subtract with carry
+RSB   rd, rs, rt, <shift>   # Reverse subtract: rd = rt - rs
+
+# Logical
+AND   rd, rs, rt, <shift>
+OR    rd, rs, rt, <shift>
+XOR   rd, rs, rt, <shift>
+BIC   rd, rs, rt, <shift>   # Bit clear: rd = rs & ~rt
+
+# Move
+MOV   rd, rt, <shift>       # rd = rt shifted
+MVN   rd, rt, <shift>       # rd = ~(rt shifted)
+
+# Compare (no destination register)
+CMP   rs, rt, <shift>       # Compare rs with (rt shifted)
+CMN   rs, rt, <shift>       # Compare negative
+TST   rs, rt, <shift>       # Test (AND without storing)
+TEQ   rs, rt, <shift>       # Test equivalence (XOR without storing)
+```
+
+### Immediate Shift vs Register Shift
+
+```assembly
+# Immediate shift amount (5-bit constant)
+ADD   r1, r2, r3, LSL #5    # Shift by constant 5
+
+# Register shift amount (use register for shift count)
+ADD   r1, r2, r3, LSL r4    # Shift by value in r4
+# r1 = r2 + (r3 << (r4 & 0x1F))  (only low 5 bits of r4 used)
+
+# Examples:
+MOV   r1, r2, LSL r3        # r1 = r2 << r3
+SUB   r4, r5, r6, ROR r7    # r4 = r5 - (r6 rotated right by r7)
+```
+
+### Zero Shift Special Cases
+
+```
+LSL #0: No shift (passthrough)
+LSR #0: Treated as LSR #32 (result = 0)
+ASR #0: Treated as ASR #32 (result = all sign bits)
+ROR #0: Treated as RRX (rotate through carry)
+```
+
+### Examples and Use Cases
+
+```c
+/* Example 1: Fast array indexing */
+void array_access(int *array, int index) {
+    int value;
+
+    /* Traditional: */
+    value = array[index];
+    /* Compiles to: */
+    asm("lw %0, (%1, %2)" : "=r"(value) : "r"(array), "r"(index*4));
+
+    /* With shifter: */
+    asm("add r1, %0, %1, lsl #2" :: "r"(array), "r"(index));
+    asm("lw %0, (r1)" : "=r"(value));
+    /* Single add instruction with built-in shift! */
+}
+
+/* Example 2: Bit manipulation */
+void set_bit(uint32_t *flags, int bit_num) {
+    /* Traditional: */
+    *flags |= (1 << bit_num);
+    /* Requires: load, shift immediate 1, or, store */
+
+    /* With shifter: */
+    asm("mov r1, #1");
+    asm("lw r2, (%0)" :: "r"(flags));
+    asm("or r2, r2, r1, lsl %0" :: "r"(bit_num));
+    asm("sw r2, (%0)" :: "r"(flags));
+    /* One less instruction! */
+}
+
+/* Example 3: Fixed-point arithmetic */
+int32_t fixed_multiply(int32_t a, int32_t b, int shift) {
+    /* result = (a * b) >> shift */
+    int64_t product;
+
+    /* With shifter operand: */
+    asm("mul %0, %1, %2" : "=r"(product) : "r"((int64_t)a), "r"((int64_t)b));
+    asm("mov %0, %1, asr %2" : "=r"(result) : "r"(product), "r"(shift));
+    /* Combined multiply and shift in minimal instructions */
+}
+
+/* Example 4: Endian swap with rotates */
+uint32_t bswap32(uint32_t x) {
+    uint32_t result;
+
+    /* Using ROR to swap bytes */
+    asm("mov %0, %1, ror #8" : "=r"(result) : "r"(x));
+    /* Plus additional byte manipulation */
+
+    return result;
+}
+```
+
+### Condition Code Updates
+
+```assembly
+# 'S' suffix updates condition codes based on result
+
+ADDS  r1, r2, r3, LSL #4    # r1 = r2 + (r3<<4), update flags
+SUBS  r4, r5, r6, ASR #8    # r4 = r5 - (r6>>8), update flags
+ANDS  r7, r8, r9, ROR #12   # r7 = r8 & (r9 rot 12), update Z flag
+```
+
+### Combining with Other Features
+
+```assembly
+# Predicated execution + shifter
+(p1) ADD  r1, r2, r3, LSL #2    # if (p1) r1 = r2 + (r3<<2)
+
+# Four-operand + shifter
+FMA   r1, r2, r3, LSL #1, r4    # r1 = (r2 * (r3<<1)) + r4
+```
+
+## 13. Multiple Load/Store with Register Mask
+
+### Overview
+
+DLX supports ARM/PowerPC-style multiple register load/store instructions with register masks for efficient function prologues/epilogues and context saving.
+
+### Instruction Formats
+
+```
+LDM/STM Format:
+┌────────┬────┬────┬──────────────────┬────┐
+│ Opcode │Mode│Base│   Register Mask  │Func│
+│   6    │ 2  │ 5  │       16         │ 3  │
+└────────┴────┴────┴──────────────────┴────┘
+
+Register Mask: 16-bit bitmap (r0-r15)
+Mode: Addressing mode (IA, IB, DA, DB)
+Base: Base register
+```
+
+### General Purpose Register Operations
+
+```assembly
+# LDM - Load Multiple
+LDM     rs, {reg_list}      # Load multiple registers from memory
+LDMIA   rs, {reg_list}      # Load Multiple Increment After
+LDMIB   rs, {reg_list}      # Load Multiple Increment Before
+LDMDA   rs, {reg_list}      # Load Multiple Decrement After
+LDMDB   rs, {reg_list}      # Load Multiple Decrement Before
+
+# STM - Store Multiple
+STM     rs, {reg_list}      # Store multiple registers to memory
+STMIA   rs, {reg_list}      # Store Multiple Increment After
+STMIB   rs, {reg_list}      # Store Multiple Increment Before
+STMDA   rs, {reg_list}      # Store Multiple Decrement After
+STMDB   rs, {reg_list}      # Store Multiple Decrement Before
+
+# Aliases for stack operations
+PUSH    {reg_list}          # Alias for STMDB sp, {reg_list}
+POP     {reg_list}          # Alias for LDMIA sp, {reg_list}
+
+# Writeback variants (update base register)
+LDM     rs!, {reg_list}     # Load and update base
+STM     rs!, {reg_list}     # Store and update base
+```
+
+### Addressing Modes
+
+```c
+/* Addressing modes for LDM/STM */
+
+// IA (Increment After): address starts at base, increments after each transfer
+LDMIA r10, {r1-r5}
+// r1 = MEM[r10 + 0]
+// r2 = MEM[r10 + 4]
+// r3 = MEM[r10 + 8]
+// r4 = MEM[r10 + 12]
+// r5 = MEM[r10 + 16]
+
+// IB (Increment Before): increment before each transfer
+LDMIB r10, {r1-r5}
+// r1 = MEM[r10 + 4]
+// r2 = MEM[r10 + 8]
+// r3 = MEM[r10 + 12]
+// r4 = MEM[r10 + 16]
+// r5 = MEM[r10 + 20]
+
+// DA (Decrement After): address starts at base, decrements after
+LDMDA r10, {r1-r5}
+// r5 = MEM[r10 + 0]
+// r4 = MEM[r10 - 4]
+// r3 = MEM[r10 - 8]
+// r2 = MEM[r10 - 12]
+// r1 = MEM[r10 - 16]
+
+// DB (Decrement Before): decrement before each transfer
+LDMDB r10, {r1-r5}
+// r5 = MEM[r10 - 4]
+// r4 = MEM[r10 - 8]
+// r3 = MEM[r10 - 12]
+// r2 = MEM[r10 - 16]
+// r1 = MEM[r10 - 20]
+```
+
+### Register List Syntax
+
+```assembly
+# Individual registers
+LDM   r10, {r1, r3, r5, r7}
+
+# Register ranges
+LDM   r10, {r1-r8}           # Load r1, r2, r3, r4, r5, r6, r7, r8
+
+# Mixed
+LDM   r10, {r1-r4, r7, r10-r15}
+
+# With PC (for function return)
+LDM   sp!, {r4-r11, pc}      # Restore registers and return
+
+# Full context save/restore
+STMDB sp!, {r0-r15}          # Save all registers
+LDMIA sp!, {r0-r15}          # Restore all registers
+```
+
+### Function Prologue/Epilogue
+
+```assembly
+# Function prologue
+function_entry:
+    PUSH  {r4-r11, lr}       # Save callee-saved regs + return address
+    # Equivalent to: STMDB sp!, {r4-r11, lr}
+
+    # Function body
+    ...
+
+function_exit:
+    POP   {r4-r11, pc}       # Restore regs and return
+    # Equivalent to: LDMIA sp!, {r4-r11, pc}
+```
+
+### FPU Multiple Load/Store
+
+```assembly
+# FLDM - FPU Load Multiple
+FLDM    rs, {fp_list}        # Load multiple FP registers
+FLDMIA  rs, {f0-f7}          # Load f0 through f7
+FLDMDB  rs!, {f16-f31}       # Load f16-f31, update base
+
+# FSTM - FPU Store Multiple
+FSTM    rs, {fp_list}        # Store multiple FP registers
+FSTMIA  rs!, {f0-f15}        # Store f0-f15, update base
+FSTMDB  sp!, {f0-f31}        # Push all FP registers
+
+# Double precision (load/store pairs)
+FLDMD   rs, {d0-d15}         # Load double-precision regs
+FSTMD   rs!, {d0-d15}        # Store double-precision regs
+
+# Quad precision (load/store quads)
+FLDMQ   rs, {q0, q4, q8}     # Load quad-precision regs
+FSTMQ   rs!, {q0-q12}        # Store quad-precision regs
+```
+
+### Vector Unit Multiple Load/Store
+
+```assembly
+# VLDM - Vector Load Multiple
+VLDM    rs, {v0-v15}         # Load vector registers
+VLDMIA  rs!, {v0-v31}        # Load all vectors, update base
+
+# VSTM - Vector Store Multiple
+VSTM    rs, {v0-v7}          # Store vector registers
+VSTMDB  sp!, {v0-v31}        # Push all vector registers
+
+# Predicate register save/restore
+PLDM    rs, {p0-p15}         # Load predicate registers
+PSTM    rs!, {p0-p63}        # Store all predicates
+```
+
+### Context Switch Example
+
+```assembly
+# Fast context switch with multiple load/store
+
+save_context:
+    # Save GPRs
+    STMIA  r0!, {r1-r15}     # Save all GPRs to context block
+    # Save FPRs
+    FSTMIA r0!, {f0-f31}     # Save all FP registers
+    # Save vector regs
+    VSTMIA r0!, {v0-v31}     # Save all vector registers
+    # Save predicates
+    PSTMIA r0!, {p0-p63}     # Save all predicate registers
+
+    jr     r31                # Return
+
+restore_context:
+    # Restore GPRs
+    LDMIA  r0!, {r1-r15}
+    # Restore FPRs
+    FLDMIA r0!, {f0-f31}
+    # Restore vector regs
+    VLDMIA r0!, {v0-v31}
+    # Restore predicates
+    PLDMIA r0!, {p0-p63}
+
+    jr     r31
+```
+
+### Interrupt Handler
+
+```assembly
+interrupt_handler:
+    # Fast register save (no memory allocation needed)
+    STMDB  sp!, {r0-r12, lr}  # Save context
+
+    # Handle interrupt
+    jal    interrupt_service_routine
+
+    # Fast restore and return
+    LDMIA  sp!, {r0-r12, pc}  # Restore and return from interrupt
+```
+
+### Sparse Register Mask
+
+```assembly
+# Save only specific registers
+PUSH   {r4, r6, r8, r10, lr}   # Save sparse set
+
+# Function uses only these registers
+...
+
+# Restore sparse set
+POP    {r4, r6, r8, r10, pc}   # Restore and return
+```
+
+### Performance Benefits
+
+```c
+/* Compare traditional vs multiple load/store */
+
+// Traditional: 16 instructions for context save
+sw   r1, 0(r10)
+sw   r2, 4(r10)
+sw   r3, 8(r10)
+// ... 13 more stores ...
+sw   r15, 60(r10)
+
+// With STM: 1 instruction!
+asm("stmia r10, {r1-r15}");
+
+/* Cycle counts:
+ * Traditional: 16 stores × 1 cycle = 16 cycles (serial)
+ * STM: 1 instruction, 16 cycles (pipelined)
+ * But: reduced I-cache pressure, fewer instruction fetches
+ */
+```
+
+### Alignment Requirements
+
+```c
+/* Multiple load/store requires aligned base address */
+
+// Base must be 4-byte aligned for word transfers
+LDMIA  r10, {r1-r8}     // r10 must be aligned to 4
+
+// Base must be 8-byte aligned for double-precision
+FLDMD  r10, {d0-d15}    // r10 must be aligned to 8
+
+// Base must be 16-byte aligned for vectors
+VLDM   r10, {v0-v15}    // r10 must be aligned to 16
+
+// Misaligned access generates exception
+```
+
+### Atomic Multiple Operations
+
+```assembly
+# Atomic load-link / store-conditional multiple (advanced)
+LLDM   rs, {reg_list}    # Load-linked multiple
+SCDM   rs, {reg_list}    # Store-conditional multiple
+
+# Example: Atomic structure update
+retry:
+    LLDM   r10, {r1-r4}   # Load 4-word structure
+    # Modify r1-r4
+    SCDM   r10, {r1-r4}   # Attempt atomic store
+    beqz   r1, retry      # Retry if failed
+```
+
+## 14. PowerPC-Style Multiple Condition Registers
+
+### Overview
+
+DLX supports PowerPC-inspired Condition Registers (CR) that allow multiple comparison results to be stored simultaneously. This enables complex conditional logic without overwriting previous comparison results.
+
+### Condition Register Architecture
+
+```c
+/* Condition Register File - 8 fields of 4 bits each */
+typedef struct {
+    uint32_t lt:1;    /* Less Than */
+    uint32_t gt:1;    /* Greater Than */
+    uint32_t eq:1;    /* Equal */
+    uint32_t so:1;    /* Summary Overflow */
+} cr_field_t;
+
+/* Complete CR - 32 bits total */
+typedef struct {
+    cr_field_t cr0;   /* Bits 0-3: Primary comparison */
+    cr_field_t cr1;   /* Bits 4-7: Secondary comparison */
+    cr_field_t cr2;   /* Bits 8-11 */
+    cr_field_t cr3;   /* Bits 12-15 */
+    cr_field_t cr4;   /* Bits 16-19 */
+    cr_field_t cr5;   /* Bits 20-23 */
+    cr_field_t cr6;   /* Bits 24-27 */
+    cr_field_t cr7;   /* Bits 28-31 */
+} condition_register_t;
+
+/* CR as 32-bit value */
+/* Format: [CR0][CR1][CR2][CR3][CR4][CR5][CR6][CR7] */
+/* Each field: [LT|GT|EQ|SO] */
+
+/* Example CR value: 0x84200000
+ * CR0 = 0b1000 (LT=1, GT=0, EQ=0, SO=0)  - result < 0
+ * CR1 = 0b0100 (LT=0, GT=1, EQ=0, SO=0)  - result > 0
+ * CR2 = 0b0010 (LT=0, GT=0, EQ=1, SO=0)  - result == 0
+ */
+```
+
+### Special Registers
+
+```c
+/* Special Registers for CR */
+#define SR_CR       0x20    /* Condition Register (32-bit) */
+#define SR_XER      0x21    /* Fixed Point Exception Register */
+
+/* XER Register bits used by CR */
+#define XER_SO      (1 << 31)   /* Summary Overflow */
+#define XER_OV      (1 << 30)   /* Overflow */
+#define XER_CA      (1 << 29)   /* Carry */
+
+/* Access CR */
+MFCR    rd              /* Move From CR: rd = CR */
+MTCR    rs              /* Move To CR: CR = rs */
+MCRFS   crd, crs        /* Move CR Field: CR[crd] = CR[crs] */
+MCRXR   crd             /* Move to CR from XER */
+```
+
+### Extended Compare Instructions
+
+```assembly
+# Compare with CR field specification
+# Format: CMP{cond} crD, rA, rB
+# Sets CR field crD based on comparison of rA and rB
+
+# Signed integer compare
+CMP     cr0, r3, r4     # CR0 = compare(r3, r4) signed
+CMPI    cr1, r5, 100    # CR1 = compare(r5, 100) signed
+
+# Unsigned integer compare
+CMPU    cr2, r6, r7     # CR2 = compare(r6, r7) unsigned
+CMPUI   cr3, r8, 0xFF   # CR3 = compare(r8, 255) unsigned
+
+# Floating-point compare
+FCMP    cr4, f1, f2     # CR4 = compare(f1, f2) FP
+FCMPD   cr5, d1, d2     # CR5 = compare(d1, d2) double
+
+# Default field (CR0) if not specified
+CMP     r3, r4          # Same as: CMP cr0, r3, r4
+```
+
+### CR Field Encoding After Compare
+
+```c
+/* Compare result encoding in CR field */
+#define CR_LT   0x8     /* 0b1000: rA < rB */
+#define CR_GT   0x4     /* 0b0100: rA > rB */
+#define CR_EQ   0x2     /* 0b0010: rA == rB */
+#define CR_SO   0x1     /* 0b0001: Summary overflow */
+
+/* Examples after signed compare: CMP cr1, r3, r4 */
+/* If r3 < r4:  CR1 = 0b1000 (LT set) */
+/* If r3 > r4:  CR1 = 0b0100 (GT set) */
+/* If r3 == r4: CR1 = 0b0010 (EQ set) */
+/* SO bit copied from XER.SO */
+```
+
+### Conditional Branches Using CR Fields
+
+```assembly
+# Branch on CR field condition
+# Format: B{condition}{crN} target
+# Tests specified CR field, branches if condition true
+
+# Branch if CR0.LT = 1 (less than)
+BLT     target          # Branch if CR0 shows LT
+BLT     cr2, target     # Branch if CR2 shows LT
+
+# Branch if CR0.GT = 1 (greater than)
+BGT     target          # Branch if CR0 shows GT
+BGT     cr3, target     # Branch if CR3 shows GT
+
+# Branch if CR0.EQ = 1 (equal)
+BEQ     target          # Branch if CR0 shows EQ
+BEQ     cr1, target     # Branch if CR1 shows EQ
+
+# Branch if CR0.SO = 1 (summary overflow)
+BSO     target          # Branch if CR0.SO set
+
+# Inverted conditions
+BNE     cr2, target     # Branch if CR2.EQ = 0
+BLE     cr3, target     # Branch if CR3.GT = 0
+BGE     cr4, target     # Branch if CR4.LT = 0
+
+# Combined conditions
+BSOL    cr5, target     # Branch if CR5.SO = 1 or CR5.LT = 1
+```
+
+### CR Logical Operations
+
+```assembly
+# CR bit manipulation (PowerPC-style)
+# Each CR field has 4 bits, so CR has 32 bits total
+# Bit numbering: bit 0 = CR0.LT, bit 1 = CR0.GT, bit 2 = CR0.EQ, bit 3 = CR0.SO, etc.
+
+# CR logical operations
+CRAND   bt, ba, bb      # CR[bt] = CR[ba] & CR[bb]
+CROR    bt, ba, bb      # CR[bt] = CR[ba] | CR[bb]
+CRXOR   bt, ba, bb      # CR[bt] = CR[ba] ^ CR[bb]
+CRNAND  bt, ba, bb      # CR[bt] = ~(CR[ba] & CR[bb])
+CRNOR   bt, ba, bb      # CR[bt] = ~(CR[ba] | CR[bb])
+CREQV   bt, ba, bb      # CR[bt] = ~(CR[ba] ^ CR[bb])
+CRANDC  bt, ba, bb      # CR[bt] = CR[ba] & ~CR[bb]
+CRORC   bt, ba, bb      # CR[bt] = CR[ba] | ~CR[bb]
+
+# Examples
+CRAND   0, 4, 8         # CR0.LT = CR1.LT & CR2.LT
+CROR    1, 5, 9         # CR0.GT = CR1.GT | CR2.GT
+CRXOR   2, 6, 10        # CR0.EQ = CR1.EQ ^ CR2.EQ
+
+# Macro for common patterns
+#define CR_BIT(field, bit)  ((field) * 4 + (bit))
+#define CR_LT_BIT(field)    CR_BIT(field, 0)
+#define CR_GT_BIT(field)    CR_BIT(field, 1)
+#define CR_EQ_BIT(field)    CR_BIT(field, 2)
+#define CR_SO_BIT(field)    CR_BIT(field, 3)
+
+# Example: Combine CR1.LT and CR2.GT
+CRAND   0, CR_LT_BIT(1), CR_GT_BIT(2)  # CR[0] = CR1.LT & CR2.GT
+```
+
+### Multi-Way Comparisons
+
+```assembly
+# Example: Multi-way comparison for sorting
+# Compare three values: r3, r4, r5
+
+compare_three_values:
+    # Compare r3 vs r4
+    CMP     cr0, r3, r4     # CR0 = compare(r3, r4)
+
+    # Compare r4 vs r5
+    CMP     cr1, r4, r5     # CR1 = compare(r4, r5)
+
+    # Compare r3 vs r5
+    CMP     cr2, r3, r5     # CR2 = compare(r3, r5)
+
+    # Now have 3 independent comparisons stored
+    # Can branch based on any combination
+
+    # If r3 < r4 and r4 < r5 → ascending order
+    BLT     cr0, .check_cr1
+    b       .not_ascending
+.check_cr1:
+    BLT     cr1, .ascending
+    b       .not_ascending
+
+.ascending:
+    # r3 < r4 < r5
+    li      r1, 0
+    jr      r31
+
+.not_ascending:
+    # Check other orderings using cr2...
+```
+
+### Complex Conditional Logic
+
+```assembly
+# Example: Complex condition - (a < b) AND (c > d) OR (e == f)
+# Using CR fields to avoid repeated comparisons
+
+complex_condition:
+    # Perform all comparisons first
+    CMP     cr0, r3, r4     # a < b  → CR0
+    CMP     cr1, r5, r6     # c > d  → CR1
+    CMP     cr2, r7, r8     # e == f → CR2
+
+    # Combine: (CR0.LT AND CR1.GT) OR CR2.EQ
+    # Use CR logical ops
+
+    CRAND   12, 0, 5        # CR3.LT = CR0.LT & CR1.GT
+    CROR    12, 12, 10      # CR3.LT = CR3.LT | CR2.EQ
+
+    # Branch on result
+    BT      12, condition_true    # Branch if bit 12 (CR3.LT) set
+
+    # Condition false
+    li      r1, 0
+    jr      r31
+
+condition_true:
+    li      r1, 1
+    jr      r31
+```
+
+### Integration with Predication
+
+```assembly
+# CR fields can feed predicate registers for predicated execution
+# Copy CR field to predicate register
+
+CR2PRED p0, cr0         # p0 = CR0 (4 bits → 4 predicates)
+CR2PRED p4, cr1         # p4-p7 = CR1 fields
+CR2PRED p8, cr2         # p8-p11 = CR2 fields
+
+# Example: Conditional execution based on comparison
+CMP     cr0, r3, r4     # Compare
+CR2PRED p0, cr0         # p0=LT, p1=GT, p2=EQ, p3=SO
+
+# Predicated instructions
+(p0)    ADD  r5, r6, r7  # Execute if r3 < r4
+(p1)    SUB  r5, r6, r7  # Execute if r3 > r4
+(p2)    XOR  r5, r5, r5  # Execute if r3 == r4
+```
+
+### Record Bit (PowerPC-Style)
+
+```assembly
+# Instructions with "." suffix update CR0 based on result
+# Similar to PowerPC record bit
+
+# Arithmetic with CR0 update
+ADD.    r3, r4, r5      # r3 = r4 + r5, update CR0
+SUB.    r6, r7, r8      # r6 = r7 - r8, update CR0
+AND.    r9, r10, r11    # r9 = r10 & r11, update CR0
+
+# CR0 updated based on result:
+# If result < 0:  CR0 = 0b1000 (LT)
+# If result > 0:  CR0 = 0b0100 (GT)
+# If result == 0: CR0 = 0b0010 (EQ)
+# CR0.SO copied from XER.SO
+
+# Example: Loop with automatic CR update
+    LI      r3, 100         # counter
+loop:
+    SUBI.   r3, r3, 1       # r3--, update CR0
+    # ... loop body ...
+    BNE     loop            # Branch if CR0.EQ not set (r3 != 0)
+```
+
+### Use Cases
+
+#### 1. Sorting Networks
+
+```c
+/* Compare-exchange using multiple CR fields */
+void compare_exchange(int *a, int *b, int *c, int *d)
+{
+    asm volatile(
+        "CMP    cr0, %0, %1    \n"  // Compare a, b
+        "CMP    cr1, %2, %3    \n"  // Compare c, d
+        "BLE    cr0, 1f        \n"  // Skip if a <= b
+        "SWAP   %0, %1         \n"  // Swap a, b
+        "1:                    \n"
+        "BLE    cr1, 2f        \n"  // Skip if c <= d
+        "SWAP   %2, %3         \n"  // Swap c, d
+        "2:                    \n"
+        : "+r"(*a), "+r"(*b), "+r"(*c), "+r"(*d)
+    );
+}
+```
+
+#### 2. Range Checking
+
+```assembly
+# Check if value is in range [min, max]
+# Uses two comparisons without overwriting results
+
+range_check:
+    # r3 = value, r4 = min, r5 = max
+    CMPU    cr0, r3, r4     # value >= min?
+    CMPU    cr1, r3, r5     # value <= max?
+
+    # Combine: BGE(cr0) AND BLE(cr1)
+    CRANDC  0, 1, 4         # CR0.LT = CR0.GT & ~CR1.LT
+    BT      0, in_range
+
+out_of_range:
+    li      r1, 0
+    jr      r31
+
+in_range:
+    li      r1, 1
+    jr      r31
+```
+
+#### 3. Three-Way String Compare
+
+```c
+/* Three-way string comparison with multiple CR fields */
+int strcmp_multiway(const char *s1, const char *s2, const char *s3)
+{
+    while (*s1 && *s2 && *s3) {
+        asm volatile(
+            "lbu    $t0, 0(%0)     \n"  // Load s1[i]
+            "lbu    $t1, 0(%1)     \n"  // Load s2[i]
+            "lbu    $t2, 0(%2)     \n"  // Load s3[i]
+            "CMP    cr0, $t0, $t1  \n"  // s1[i] vs s2[i]
+            "CMP    cr1, $t1, $t2  \n"  // s2[i] vs s3[i]
+            "CMP    cr2, $t0, $t2  \n"  // s1[i] vs s3[i]
+            "BNE    cr0, not_equal \n"
+            "BNE    cr1, not_equal \n"
+            "BNE    cr2, not_equal \n"
+            : : "r"(s1), "r"(s2), "r"(s3)
+        );
+        s1++; s2++; s3++;
+    }
+    return 0;
+not_equal:
+    /* Analyze CR0-CR2 to determine ordering */
+    return analyze_cr_fields();
+}
+```
+
+### Instruction Encoding
+
+```
+┌────────┬────┬────┬────┬────────────┬────┐
+│ Opcode │crD │ rA │ rB │    Func    │ 0  │  Compare
+│   6    │ 3  │ 5  │ 5  │     11     │ 2  │
+└────────┴────┴────┴────┴────────────┴────┘
+
+crD: Target CR field (0-7)
+rA, rB: Source registers
+Func: Compare type
+  0x000: CMP   (signed)
+  0x001: CMPU  (unsigned)
+  0x002: FCMP  (floating-point)
+  0x003: FCMPD (double FP)
+
+┌────────┬────┬────┬─────────────────────┐
+│ Opcode │ bt │ ba │   bb    │   Func   │  CR Logical
+│   6    │ 5  │ 5  │    5    │    11    │
+└────────┴────┴────┴─────────┴──────────┘
+
+bt: Target CR bit (0-31)
+ba, bb: Source CR bits (0-31)
+Func: CR logical operation
+  0x001: CRAND
+  0x002: CROR
+  0x003: CRXOR
+  0x004: CRNAND
+  0x005: CRNOR
+  0x006: CREQV
+  0x007: CRANDC
+  0x008: CRORC
+```
+
+### Context Switching
+
+```c
+/* Save/restore CR in context switch */
+struct task_struct {
+    uint32_t cr;        /* Condition Register */
+    uint32_t xer;       /* Fixed Point Exception Register */
+    /* ... other state ... */
+};
+
+void save_cr_state(struct task_struct *task)
+{
+    asm volatile("mfcr %0" : "=r"(task->cr));
+    asm volatile("mfsr %0, $XER" : "=r"(task->xer));
+}
+
+void restore_cr_state(struct task_struct *task)
+{
+    asm volatile("mtcr %0" :: "r"(task->cr));
+    asm volatile("mtsr $XER, %0" :: "r"(task->xer));
+}
+```
+
+### Performance Considerations
+
+```c
+/*
+ * Multiple CR fields enable:
+ *
+ * 1. Parallel comparisons without dependency chains
+ * 2. Complex conditional logic without repeated compares
+ * 3. Efficient multi-way branches
+ * 4. Reduced branch misprediction penalties
+ *
+ * Cost: 32 bits of state, minimal area overhead
+ * Benefit: 2-5x speedup in comparison-heavy code
+ */
+```
+
+### Summary
+
+**Key Features**:
+- 8 independent CR fields (CR0-CR7), 4 bits each
+- Each field stores LT, GT, EQ, SO comparison result
+- Compare instructions specify target CR field
+- Branch instructions can test any CR field
+- CR logical operations combine conditions
+- Integration with predication system
+- Record bit for automatic CR0 update
+
+**Use Cases**:
+- Sorting and searching algorithms
+- Range checking and validation
+- Multi-way comparisons
+- Complex conditional logic
+- Predicated execution
+- Reduced branch misprediction
+
+**PowerPC Compatibility**:
+- Inspired by PowerPC CR architecture
+- Similar encoding and semantics
+- CR logical operations match PowerPC
+- Record bit functionality
+
+## 15. ARM64-Style Pointer Authentication (PAC)
+
+### Overview
+
+DLX implements ARM64-inspired Pointer Authentication Codes (PAC) to provide cryptographic protection against code reuse attacks (ROP, JOP) and memory corruption exploits. PAC adds cryptographic signatures to pointers, making them unusable if tampered with.
+
+### Security Model
+
+```c
+/*
+ * Pointer Authentication protects against:
+ * - Return-Oriented Programming (ROP)
+ * - Jump-Oriented Programming (JOP)
+ * - Buffer overflow pointer corruption
+ * - vtable hijacking
+ * - Function pointer corruption
+ *
+ * PAC embeds a cryptographic signature in unused high bits of pointers
+ */
+```
+
+### PAC Key Architecture
+
+```c
+/* Five 128-bit PAC keys stored in special registers */
+typedef struct {
+    uint64_t low;
+    uint64_t high;
+} pac_key_t;
+
+/* PAC Key Registers (accessible only in kernel mode) */
+pac_key_t APIAKey;   /* Instruction pointer A key */
+pac_key_t APIBKey;   /* Instruction pointer B key */
+pac_key_t APDAKey;   /* Data pointer A key */
+pac_key_t APDBKey;   /* Data pointer B key */
+pac_key_t APGAKey;   /* Generic authentication key */
+
+/* Key management */
+#define SR_APIAKEY_LOW   0x50   /* APIAKey[63:0] */
+#define SR_APIAKEY_HIGH  0x51   /* APIAKey[127:64] */
+#define SR_APIBKEY_LOW   0x52
+#define SR_APIBKEY_HIGH  0x53
+#define SR_APDAKEY_LOW   0x54
+#define SR_APDAKEY_HIGH  0x55
+#define SR_APDBKEY_LOW   0x56
+#define SR_APDBKEY_HIGH  0x57
+#define SR_APGAKEY_LOW   0x58
+#define SR_APGAKEY_HIGH  0x59
+
+/* Initialize keys (kernel only) */
+void init_pac_keys(void)
+{
+    pac_key_t key;
+
+    /* Generate random keys */
+    key.low = random64();
+    key.high = random64();
+
+    asm volatile("mtsr $APIAKEY_LOW, %0" :: "r"(key.low));
+    asm volatile("mtsr $APIAKEY_HIGH, %0" :: "r"(key.high));
+    /* ... initialize other keys ... */
+}
+```
+
+### PAC Bit Layout (32-bit DLX)
+
+```
+┌──────────────┬──────────────────────────┐
+│   PAC (8)    │    Address (24)         │
+│   bits 31-24 │    bits 23-0            │
+└──────────────┴──────────────────────────┘
+
+For 32-bit pointers:
+- Bits 23-0: Actual address (16 MB addressable per pointer)
+- Bits 31-24: PAC signature (8 bits)
+
+For 64-bit pointers (if 64-bit extension enabled):
+- Bits 47-0: Actual address (256 TB addressable)
+- Bits 63-48: PAC signature (16 bits)
+```
+
+### PAC Instructions
+
+#### Sign Instructions
+
+```assembly
+# Sign instruction pointers (for return addresses, function pointers)
+PACIA   rd, rs          # Sign rd using APIAKey with context rs
+PACIB   rd, rs          # Sign rd using APIBKey with context rs
+
+# Sign data pointers (for C++ vtables, data structure pointers)
+PACDA   rd, rs          # Sign rd using APDAKey with context rs
+PACDB   rd, rs          # Sign rd using APDBKey with context rs
+
+# Generic authentication
+PACGA   rd, rn, rm      # rd = PAC(rn, rm) using APGAKey
+
+# Sign with SP as context (common case)
+PACIASP                 # PACIA lr, sp (sign return address)
+PACIBSP                 # PACIB lr, sp
+
+# Examples
+    # Sign return address before call
+    PACIASP             # Sign lr with sp as context
+    JAL     function    # Call function
+
+    # Sign a function pointer
+    PACIA   r3, r4      # Sign r3 with r4 as context
+
+    # Sign a vtable pointer
+    PACDA   r5, r6      # Sign r5 with r6 as context
+```
+
+#### Authenticate Instructions
+
+```assembly
+# Authenticate and strip PAC from instruction pointers
+AUTIA   rd, rs          # Authenticate rd using APIAKey with context rs
+AUTIB   rd, rs          # Authenticate rd using APIBKey with context rs
+
+# Authenticate and strip PAC from data pointers
+AUTDA   rd, rs          # Authenticate rd using APDAKey with context rs
+AUTDB   rd, rs          # Authenticate rd using APDBKey with context rs
+
+# Authenticate with SP as context
+AUTIASP                 # AUTIA lr, sp (authenticate return address)
+AUTIBSP                 # AUTIB lr, sp
+
+# Examples
+    # Authenticate return address after return
+    AUTIASP             # Authenticate lr with sp as context
+    JR      lr          # Return to authenticated address
+
+    # Authenticate before indirect call
+    AUTIA   r3, r4      # Authenticate r3 with r4 as context
+    JALR    r3          # Call authenticated function
+
+    # Authenticate vtable pointer before use
+    AUTDA   r5, r6      # Authenticate r5 with r6 as context
+    LW      r7, 0(r5)   # Load from authenticated vtable
+```
+
+#### Strip Instructions (No Authentication)
+
+```assembly
+# Strip PAC without authenticating (for debugging, special cases)
+XPACI   rd              # Strip PAC from instruction pointer
+XPACD   rd              # Strip PAC from data pointer
+
+# These do NOT verify authenticity, only remove the PAC bits
+# Use with caution - only for debugging or controlled scenarios
+```
+
+### PAC Algorithm
+
+```c
+/* Simplified PAC algorithm (actual implementation is hardware-specific) */
+uint32_t compute_pac(uint32_t pointer, uint64_t context, pac_key_t key)
+{
+    uint64_t input[3];
+    uint64_t hash;
+
+    /* Prepare input for hash */
+    input[0] = pointer;
+    input[1] = context;
+    input[2] = key.low ^ key.high;
+
+    /* Compute PAC using QARMA or PRINCE cipher (ARM uses QARMA) */
+    hash = qarma64(input, key);
+
+    /* Extract PAC bits (high 8 bits for 32-bit pointers) */
+    uint32_t pac = (hash >> 56) & 0xFF;
+
+    /* Insert PAC into high bits of pointer */
+    return (pointer & 0x00FFFFFF) | (pac << 24);
+}
+
+uint32_t authenticate_pac(uint32_t signed_ptr, uint64_t context, pac_key_t key)
+{
+    uint32_t ptr = signed_ptr & 0x00FFFFFF;  /* Extract address */
+    uint32_t pac = (signed_ptr >> 24) & 0xFF; /* Extract PAC */
+
+    /* Recompute expected PAC */
+    uint32_t expected_pac = (compute_pac(ptr, context, key) >> 24) & 0xFF;
+
+    if (pac != expected_pac) {
+        /* Authentication failure - poison pointer or trap */
+        return poison_pointer(signed_ptr);  /* Sets bit 23 */
+    }
+
+    return ptr;  /* Return clean pointer */
+}
+
+uint32_t poison_pointer(uint32_t ptr)
+{
+    /* ARM64 strategy: flip bit in address to create invalid pointer */
+    return ptr | 0x00800000;  /* Set bit 23 - creates invalid address */
+}
+```
+
+### Protected Function Calls
+
+```assembly
+# Standard function call with PAC
+function_call_protected:
+    # Before call
+    PACIASP             # Sign return address (lr) with sp
+    JAL     target      # Call function
+
+    # After return
+    AUTIASP             # Authenticate return address
+    # If authentication fails, lr is poisoned → crash on use
+    JR      lr          # Return (will fault if lr was corrupted)
+
+# Tail call with PAC
+tail_call_protected:
+    AUTIASP             # Authenticate current lr
+    PACIASP             # Re-sign for tail call
+    J       target      # Tail call
+```
+
+### Protected Indirect Calls
+
+```assembly
+# Function pointer call with PAC
+indirect_call_protected:
+    # r3 = function pointer (signed)
+    # r4 = context (e.g., object pointer for C++)
+
+    PACIA   lr, sp      # Sign our return address
+    AUTIA   r3, r4      # Authenticate function pointer
+    JALR    r3          # Call authenticated function
+    AUTIA   lr, sp      # Authenticate return address
+    JR      lr          # Return
+
+# vtable call (C++) with PAC
+vtable_call_protected:
+    # r5 = object pointer
+    # r6 = vtable pointer (signed with object as context)
+
+    AUTDA   r6, r5      # Authenticate vtable pointer
+    LW      r7, 8(r6)   # Load method pointer from vtable
+    AUTIA   r7, r6      # Authenticate method pointer
+    JALR    r7          # Call authenticated method
+```
+
+### Context Switching with PAC
+
+```c
+struct task_struct {
+    pac_key_t apikey_a; /* Per-process keys */
+    pac_key_t apikey_b;
+    pac_key_t apdkey_a;
+    pac_key_t apdkey_b;
+    pac_key_t apgkey;
+};
+
+void switch_pac_keys(struct task_struct *next)
+{
+    /* Load process-specific PAC keys */
+    asm volatile(
+        "mtsr $APIAKEY_LOW, %0\n"
+        "mtsr $APIAKEY_HIGH, %1\n"
+        "mtsr $APIBKEY_LOW, %2\n"
+        "mtsr $APIBKEY_HIGH, %3\n"
+        :: "r"(next->apikey_a.low), "r"(next->apikey_a.high),
+           "r"(next->apikey_b.low), "r"(next->apikey_b.high)
+    );
+    /* ... load other keys ... */
+}
+```
+
+### PAC in System Calls
+
+```assembly
+# System call with PAC protection
+syscall_entry:
+    # User mode → Kernel mode
+    # lr contains signed return address
+
+    AUTIASP             # Authenticate user return address
+
+    # Save authenticated lr
+    SW      lr, saved_lr(sp)
+
+    # Process syscall
+    # ...
+
+    # Return to user mode
+    LW      lr, saved_lr(sp)
+    PACIASP             # Re-sign return address for user
+    ERET                # Return to user mode
+```
+
+### PAC Exception Handling
+
+```c
+/* PAC fault occurs when authenticated pointer is used */
+void handle_pac_fault(struct pt_regs *regs)
+{
+    /* PAC authentication failure detected */
+    printk(KERN_ALERT "PAC authentication failure at PC=%08x\n",
+           regs->pc);
+
+    /* This is likely a security violation */
+    /* Terminate the process */
+    do_exit(SIGSEGV);
+}
+```
+
+### Compiler Integration
+
+```c
+/* GCC/Clang attributes for PAC */
+
+/* Enable PAC for all functions in this file */
+#pragma GCC target "+pac"
+
+/* Function-specific PAC control */
+__attribute__((ptrauth_returns))        /* Sign return addresses */
+__attribute__((ptrauth_calls))          /* Sign function pointers */
+__attribute__((ptrauth_vtables))        /* Sign C++ vtables */
+
+/* Example */
+__attribute__((ptrauth_returns))
+int secure_function(int x)
+{
+    /* Return address automatically signed/authenticated */
+    return x * 2;
+}
+
+/* Disable PAC for specific function (e.g., interrupt handlers) */
+__attribute__((no_ptrauth))
+void interrupt_handler(void)
+{
+    /* No PAC overhead in time-critical code */
+}
+```
+
+### PAC Control Register
+
+```c
+/* CP0 PAC Configuration Register */
+typedef struct {
+    uint32_t enable:1;          /* Bit 0: Enable PAC */
+    uint32_t kernel_enable:1;   /* Bit 1: Enable PAC in kernel */
+    uint32_t user_enable:1;     /* Bit 2: Enable PAC in user mode */
+    uint32_t trap_on_fail:1;    /* Bit 3: Trap on auth failure */
+    uint32_t poison_on_fail:1;  /* Bit 4: Poison pointer on failure */
+    uint32_t key_per_process:1; /* Bit 5: Per-process keys */
+    uint32_t reserved:26;
+} pac_config_t;
+
+#define SR_PAC_CONFIG   0x5A
+
+/* Enable PAC */
+void enable_pac(void)
+{
+    uint32_t config = 0;
+    config |= (1 << 0);  /* Enable PAC */
+    config |= (1 << 1);  /* Enable in kernel */
+    config |= (1 << 2);  /* Enable in user mode */
+    config |= (1 << 3);  /* Trap on failure */
+
+    asm volatile("mtsr $PAC_CONFIG, %0" :: "r"(config));
+}
+```
+
+### Use Cases
+
+#### 1. Return Address Protection
+
+```c
+/* Automatic return address protection */
+int protected_function(int arg)
+{
+    /* Compiler inserts PACIASP at function entry */
+
+    char buffer[64];
+    /* Even if buffer overflow occurs, cannot corrupt return address */
+    gets(buffer);  /* Dangerous but return address is protected */
+
+    /* Compiler inserts AUTIASP before return */
+    return arg;
+}
+```
+
+#### 2. C++ Virtual Function Protection
+
+```cpp
+class Base {
+public:
+    virtual void method() {
+        /* vtable pointer is PAC-signed */
+    }
+};
+
+void call_virtual(Base *obj) {
+    /* vtable pointer authenticated before dereference */
+    obj->method();  /* Safe from vtable hijacking */
+}
+```
+
+#### 3. Function Pointer Protection
+
+```c
+typedef int (*callback_t)(int);
+
+void register_callback(callback_t func, void *context) {
+    /* Sign function pointer with context */
+    asm volatile("pacia %0, %1" : "+r"(func) : "r"(context));
+
+    /* Store signed pointer */
+    callbacks[num_callbacks++] = func;
+}
+
+void invoke_callback(int index, int arg) {
+    callback_t func = callbacks[index];
+
+    /* Authenticate before calling */
+    asm volatile("autia %0, %1" : "+r"(func) : "r"(context));
+
+    /* Call authenticated function */
+    func(arg);  /* Safe from function pointer corruption */
+}
+```
+
+### Performance Impact
+
+```c
+/*
+ * PAC overhead:
+ * - Sign: 1-3 cycles (hardware accelerated)
+ * - Authenticate: 1-3 cycles
+ * - Typical function call overhead: 2-6 cycles
+ * - Minimal impact: ~2-5% on most workloads
+ *
+ * Security benefit:
+ * - Stops ~90% of code reuse attacks
+ * - Makes ROP chains nearly impossible
+ * - Protects critical pointers at low cost
+ */
+```
+
+### Instruction Encoding
+
+```
+┌────────┬────┬────┬─────┬───────────────┐
+│ Opcode │ rd │ rs │Func │    Reserved   │  PAC Sign
+│   6    │ 5  │ 5  │ 3   │      13       │
+└────────┴────┴────┴─────┴───────────────┘
+
+Func:
+  0x0: PACIA  (sign instruction pointer, A key)
+  0x1: PACIB  (sign instruction pointer, B key)
+  0x2: PACDA  (sign data pointer, A key)
+  0x3: PACDB  (sign data pointer, B key)
+  0x4: AUTIA  (authenticate instruction pointer, A key)
+  0x5: AUTIB  (authenticate instruction pointer, B key)
+  0x6: AUTDA  (authenticate data pointer, A key)
+  0x7: AUTDB  (authenticate data pointer, B key)
+
+┌────────┬────┬───────────────────────────┐
+│ Opcode │ rd │         Func              │  PAC Strip/SP variants
+│   6    │ 5  │           21              │
+└────────┴────┴───────────────────────────┘
+
+Func:
+  0x000: XPACI   (strip instruction PAC)
+  0x001: XPACD   (strip data PAC)
+  0x010: PACIASP (sign lr with sp)
+  0x011: PACIBSP
+  0x012: AUTIASP (authenticate lr with sp)
+  0x013: AUTIBSP
+```
+
+### Boot-Time PAC Initialization
+
+```c
+/* Initialize PAC system at boot */
+void __init pac_init(void)
+{
+    pac_key_t keys[5];
+    int i;
+
+    /* Generate cryptographically random keys */
+    for (i = 0; i < 5; i++) {
+        get_random_bytes(&keys[i], sizeof(pac_key_t));
+    }
+
+    /* Load keys into hardware */
+    load_pac_keys(keys);
+
+    /* Enable PAC */
+    enable_pac();
+
+    printk(KERN_INFO "PAC initialized with random keys\n");
+}
+```
+
+### Summary
+
+**Key Features**:
+- Five 128-bit PAC keys (APIA, APIB, APDA, APDB, APGA)
+- Sign/authenticate instruction and data pointers
+- 8-bit PAC in high bits of 32-bit pointers (16-bit on 64-bit)
+- Hardware-accelerated QARMA cipher
+- Trap or poison on authentication failure
+- Compiler integration for automatic protection
+- Per-process keys for isolation
+
+**Security Benefits**:
+- Prevents ROP/JOP attacks
+- Protects return addresses from corruption
+- Secures C++ vtables
+- Validates function pointers
+- Minimal performance overhead (2-5%)
+
+**ARM64 Compatibility**:
+- Based on ARMv8.3-A PAC extension
+- Similar instruction naming and semantics
+- QARMA-based PAC algorithm
+- Pointer poisoning strategy
+
+## 16. Endian-Swapping Load/Store and Auto-Increment/Decrement
+
+### Overview
+
+DLX provides PowerPC-style byte-reversed load/store instructions for cross-endian data access, combined with ARM-style pre/post-increment addressing modes for efficient sequential access patterns.
+
+### Endian-Swapping Load/Store Instructions
+
+#### Byte-Reversed Load Instructions
+
+```assembly
+# Load with automatic byte reversal (PowerPC LWBRX style)
+LWBRX   rd, (rs)        # Load word byte-reversed indexed
+LHBRX   rd, (rs)        # Load halfword byte-reversed indexed
+LDBRX   rd, (rs)        # Load doubleword byte-reversed (64-bit)
+
+# With offset
+LWBRX   rd, offset(rs)  # Load word byte-reversed with offset
+LHBRX   rd, offset(rs)  # Load halfword byte-reversed with offset
+
+# Examples
+    # Load big-endian word from network packet
+    LWBRX   r3, 0(r4)   # r3 = byte_swap32(mem[r4])
+
+    # Load big-endian halfword (e.g., port number)
+    LHBRX   r5, 2(r4)   # r5 = byte_swap16(mem[r4+2])
+
+    # Load little-endian data on big-endian system
+    LI      r10, buffer
+    LWBRX   r11, 0(r10) # Auto-swap for cross-endian compatibility
+```
+
+#### Byte-Reversed Store Instructions
+
+```assembly
+# Store with automatic byte reversal
+STWBRX  rs, (rd)        # Store word byte-reversed indexed
+STHBRX  rs, (rd)        # Store halfword byte-reversed indexed
+STDBRX  rs, (rd)        # Store doubleword byte-reversed (64-bit)
+
+# With offset
+STWBRX  rs, offset(rd)  # Store word byte-reversed with offset
+STHBRX  rs, offset(rd)  # Store halfword byte-reversed with offset
+
+# Examples
+    # Store word to network packet (convert to big-endian)
+    STWBRX  r3, 0(r4)   # mem[r4] = byte_swap32(r3)
+
+    # Store port number (convert to network byte order)
+    STHBRX  r5, 2(r4)   # mem[r4+2] = byte_swap16(r5)
+```
+
+#### Endian Swap Semantics
+
+```c
+/* LWBRX: Load Word Byte-Reversed */
+uint32_t lwbrx(uint32_t *addr)
+{
+    uint32_t val = *addr;
+    return ((val & 0x000000FF) << 24) |
+           ((val & 0x0000FF00) << 8)  |
+           ((val & 0x00FF0000) >> 8)  |
+           ((val & 0xFF000000) >> 24);
+}
+
+/* LHBRX: Load Halfword Byte-Reversed */
+uint16_t lhbrx(uint16_t *addr)
+{
+    uint16_t val = *addr;
+    return ((val & 0x00FF) << 8) |
+           ((val & 0xFF00) >> 8);
+}
+
+/* STWBRX: Store Word Byte-Reversed */
+void stwbrx(uint32_t val, uint32_t *addr)
+{
+    *addr = ((val & 0x000000FF) << 24) |
+            ((val & 0x0000FF00) << 8)  |
+            ((val & 0x00FF0000) >> 8)  |
+            ((val & 0xFF000000) >> 24);
+}
+```
+
+### Auto-Increment/Decrement Addressing Modes
+
+#### Post-Increment Load/Store
+
+```assembly
+# Load/Store with post-increment (ARM-style)
+LW      rd, (rs)+       # rd = mem[rs], rs = rs + 4
+LH      rd, (rs)+       # rd = mem[rs], rs = rs + 2
+LB      rd, (rs)+       # rd = mem[rs], rs = rs + 1
+LD      rd, (rs)+       # rd = mem[rs], rs = rs + 8 (64-bit)
+
+SW      rt, (rs)+       # mem[rs] = rt, rs = rs + 4
+SH      rt, (rs)+       # mem[rs] = rt, rs = rs + 2
+SB      rt, (rs)+       # mem[rs] = rt, rs = rs + 1
+SD      rt, (rs)+       # mem[rs] = rt, rs = rs + 8 (64-bit)
+
+# Examples
+    # Copy array elements
+    LI      r10, src_array
+    LI      r11, dst_array
+    LI      r12, 100        # count
+
+.loop:
+    LW      r13, (r10)+     # Load and increment src
+    SW      r13, (r11)+     # Store and increment dst
+    SUBI    r12, r12, 1
+    BNEZ    r12, .loop
+```
+
+#### Pre-Increment Load/Store
+
+```assembly
+# Load/Store with pre-increment
+LW      rd, +(rs)       # rs = rs + 4, rd = mem[rs]
+LH      rd, +(rs)       # rs = rs + 2, rd = mem[rs]
+LB      rd, +(rs)       # rs = rs + 1, rd = mem[rs]
+
+SW      rt, +(rs)       # rs = rs + 4, mem[rs] = rt
+SH      rt, +(rs)       # rs = rs + 2, mem[rs] = rt
+SB      rt, +(rs)       # rs = rs + 1, mem[rs] = rt
+
+# Examples
+    # Push to stack (grows upward)
+    SW      r3, +(sp)   # sp += 4, then store
+
+    # String processing
+    LI      r10, string - 1
+.scan:
+    LB      r11, +(r10) # Increment, then load next char
+    BEQZ    r11, .done
+    # Process character
+    J       .scan
+```
+
+#### Post-Decrement Load/Store
+
+```assembly
+# Load/Store with post-decrement
+LW      rd, (rs)-       # rd = mem[rs], rs = rs - 4
+LH      rd, (rs)-       # rd = mem[rs], rs = rs - 2
+LB      rd, (rs)-       # rd = mem[rs], rs = rs - 1
+
+SW      rt, (rs)-       # mem[rs] = rt, rs = rs - 4
+SH      rt, (rs)-       # mem[rs] = rt, rs = rs - 2
+SB      rt, (rs)-       # mem[rs] = rt, rs = rs - 1
+
+# Examples
+    # Reverse copy
+    LI      r10, src_end
+    LI      r11, dst_end
+    LI      r12, 100
+
+.loop:
+    LW      r13, (r10)-     # Load from end, decrement
+    SW      r13, (r11)-     # Store to end, decrement
+    SUBI    r12, r12, 1
+    BNEZ    r12, .loop
+```
+
+#### Pre-Decrement Load/Store
+
+```assembly
+# Load/Store with pre-decrement
+LW      rd, -(rs)       # rs = rs - 4, rd = mem[rs]
+LH      rd, -(rs)       # rs = rs - 2, rd = mem[rs]
+LB      rd, -(rs)       # rs = rs - 1, rd = mem[rs]
+
+SW      rt, -(rs)       # rs = rs - 4, mem[rs] = rt
+SH      rt, -(rs)       # rs = rs - 2, mem[rs] = rt
+SB      rt, -(rs)       # rs = rs - 1, mem[rs] = rt
+
+# Examples
+    # Push to stack (downward growing - typical)
+    SW      r3, -(sp)   # sp -= 4, then store
+
+    # Pop from stack
+    LW      r4, (sp)+   # Load, then sp += 4
+```
+
+### Combined: Endian-Swapping with Auto-Increment/Decrement
+
+```assembly
+# Byte-reversed load/store with post-increment
+LWBRX   rd, (rs)+       # rd = byte_swap(mem[rs]), rs += 4
+LHBRX   rd, (rs)+       # rd = byte_swap(mem[rs]), rs += 2
+STWBRX  rt, (rs)+       # mem[rs] = byte_swap(rt), rs += 4
+STHBRX  rt, (rs)+       # mem[rs] = byte_swap(rt), rs += 2
+
+# Byte-reversed with pre-increment
+LWBRX   rd, +(rs)       # rs += 4, rd = byte_swap(mem[rs])
+STWBRX  rt, +(rs)       # rs += 4, mem[rs] = byte_swap(rt)
+
+# Byte-reversed with post-decrement
+LWBRX   rd, (rs)-       # rd = byte_swap(mem[rs]), rs -= 4
+STWBRX  rt, (rs)-       # mem[rs] = byte_swap(rt), rs -= 4
+
+# Byte-reversed with pre-decrement
+LWBRX   rd, -(rs)       # rs -= 4, rd = byte_swap(mem[rs])
+STWBRX  rt, -(rs)       # rs -= 4, mem[rs] = byte_swap(rt)
+
+# Example: Convert network packet from big-endian
+    LI      r10, packet_buf
+    LI      r11, 10         # 10 words to convert
+
+.convert_loop:
+    LWBRX   r12, (r10)+     # Load big-endian, convert, increment
+    SW      r12, local_buf(r11)
+    SUBI    r11, r11, 1
+    BNEZ    r11, .convert_loop
+```
+
+### Use Cases
+
+#### 1. Network Protocol Processing
+
+```c
+/* Parse TCP header with automatic endian conversion */
+struct tcp_header {
+    uint16_t src_port;      /* Big-endian */
+    uint16_t dst_port;      /* Big-endian */
+    uint32_t seq_num;       /* Big-endian */
+    uint32_t ack_num;       /* Big-endian */
+};
+
+void parse_tcp_header(uint8_t *packet, struct tcp_header *hdr)
+{
+    uint16_t *p16 = (uint16_t *)packet;
+    uint32_t *p32 = (uint32_t *)packet;
+
+    asm volatile(
+        "lhbrx  %0, 0(%2) \n"   /* src_port */
+        "lhbrx  %1, 2(%2) \n"   /* dst_port */
+        : "=r"(hdr->src_port), "=r"(hdr->dst_port)
+        : "r"(packet)
+    );
+
+    asm volatile(
+        "lwbrx  %0, 4(%2) \n"   /* seq_num */
+        "lwbrx  %1, 8(%2) \n"   /* ack_num */
+        : "=r"(hdr->seq_num), "=r"(hdr->ack_num)
+        : "r"(packet)
+    );
+}
+```
+
+#### 2. Optimized memcpy
+
+```assembly
+# Fast memcpy with post-increment
+# r3 = dst, r4 = src, r5 = count (bytes)
+
+optimized_memcpy:
+    SRLI    r6, r5, 2       # word count = bytes / 4
+    ANDI    r7, r5, 3       # remaining bytes
+
+    # Copy words with post-increment
+.word_loop:
+    BEQZ    r6, .byte_copy
+    LW      r8, (r4)+       # Load word, src += 4
+    SW      r8, (r3)+       # Store word, dst += 4
+    SUBI    r6, r6, 1
+    J       .word_loop
+
+    # Copy remaining bytes
+.byte_copy:
+    BEQZ    r7, .done
+    LB      r8, (r4)+       # Load byte, src++
+    SB      r8, (r3)+       # Store byte, dst++
+    SUBI    r7, r7, 1
+    J       .byte_copy
+
+.done:
+    JR      r31
+```
+
+#### 3. String Operations
+
+```assembly
+# strlen with post-increment
+# r3 = string pointer, returns length in r1
+
+strlen:
+    MV      r10, r3         # Save original pointer
+    LI      r11, 0          # length = 0
+
+.loop:
+    LB      r12, (r10)+     # Load byte, pointer++
+    BEQZ    r12, .done      # Break if null terminator
+    ADDI    r11, r11, 1     # length++
+    J       .loop
+
+.done:
+    MV      r1, r11         # Return length
+    JR      r31
+
+# strcpy with post-increment
+# r3 = dst, r4 = src
+
+strcpy:
+.copy_loop:
+    LB      r10, (r4)+      # Load from src, src++
+    SB      r10, (r3)+      # Store to dst, dst++
+    BNEZ    r10, .copy_loop # Continue until null
+    JR      r31
+```
+
+#### 4. Stack Frame Management
+
+```assembly
+# Function prologue with pre-decrement
+function_entry:
+    SW      lr, -(sp)       # Push return address
+    SW      r31, -(sp)      # Push frame pointer
+    MV      r31, sp         # Set frame pointer
+
+    # Allocate local variables
+    SW      r4, -(sp)       # Save callee-saved registers
+    SW      r5, -(sp)
+    SW      r6, -(sp)
+
+    # Function body
+    # ...
+
+# Function epilogue with post-increment
+function_exit:
+    LW      r6, (sp)+       # Restore callee-saved registers
+    LW      r5, (sp)+
+    LW      r4, (sp)+
+
+    MV      sp, r31         # Restore stack pointer
+    LW      r31, (sp)+      # Pop frame pointer
+    LW      lr, (sp)+       # Pop return address
+    JR      lr
+```
+
+#### 5. Circular Buffer Operations
+
+```assembly
+# Circular buffer write with auto-increment and wraparound
+# r3 = buffer base, r4 = buffer size, r5 = current_pos, r6 = value
+
+circular_buffer_write:
+    # Calculate address
+    ADD     r10, r3, r5     # addr = base + pos
+
+    # Write value
+    SW      r6, (r10)       # Store value
+
+    # Increment position with wraparound
+    ADDI    r5, r5, 4       # pos += 4
+    BGE     r5, r4, .wrap   # if pos >= size, wrap
+
+    JR      r31
+
+.wrap:
+    LI      r5, 0           # pos = 0
+    JR      r31
+```
+
+#### 6. Little-Endian File Format on Big-Endian System
+
+```c
+/* Read little-endian file format */
+struct file_header {
+    uint32_t magic;         /* Little-endian */
+    uint32_t version;       /* Little-endian */
+    uint32_t offset;        /* Little-endian */
+    uint32_t size;          /* Little-endian */
+};
+
+int read_file_header(int fd, struct file_header *hdr)
+{
+    uint32_t buf[4];
+    read(fd, buf, sizeof(buf));
+
+    /* If system is big-endian, need byte swap */
+    #if __BYTE_ORDER == __BIG_ENDIAN
+    asm volatile(
+        "lwbrx  %0, 0(%4) \n"
+        "lwbrx  %1, 4(%4) \n"
+        "lwbrx  %2, 8(%4) \n"
+        "lwbrx  %3, 12(%4) \n"
+        : "=r"(hdr->magic), "=r"(hdr->version),
+          "=r"(hdr->offset), "=r"(hdr->size)
+        : "r"(buf)
+    );
+    #else
+    memcpy(hdr, buf, sizeof(*hdr));
+    #endif
+
+    return 0;
+}
+```
+
+### Instruction Encoding
+
+```
+┌────────┬────┬────┬────┬────┬─────────┐
+│ Opcode │ rd │ rs │off │mode│  Func   │  Load/Store variants
+│   6    │ 5  │ 5  │ 8  │ 2  │    6    │
+└────────┴────┴────┴────┴────┴─────────┘
+
+mode: Addressing mode
+  0b00: Normal (no auto-increment)
+  0b01: Post-increment (addr, then addr += size)
+  0b10: Pre-increment (addr += size, then addr)
+  0b11: Post-decrement (addr, then addr -= size)
+  0b11: Pre-decrement (addr -= size, then addr)  [use sign of offset]
+
+Func: Operation
+  0x00: LW     (load word)
+  0x01: LH     (load halfword)
+  0x02: LB     (load byte)
+  0x03: LD     (load doubleword)
+  0x08: SW     (store word)
+  0x09: SH     (store halfword)
+  0x0A: SB     (store byte)
+  0x0B: SD     (store doubleword)
+  0x10: LWBRX  (load word byte-reversed)
+  0x11: LHBRX  (load halfword byte-reversed)
+  0x12: LDBRX  (load doubleword byte-reversed)
+  0x18: STWBRX (store word byte-reversed)
+  0x19: STHBRX (store halfword byte-reversed)
+  0x1A: STDBRX (store doubleword byte-reversed)
+```
+
+### Performance Benefits
+
+```c
+/*
+ * Auto-increment addressing:
+ * - Reduces register pressure (no separate ADD instruction)
+ * - Improves code density (1 instruction vs 2)
+ * - Enables better loop optimization
+ * - Faster memcpy/memset/strcpy (30-50% speedup)
+ *
+ * Endian-swapping loads/stores:
+ * - Eliminates separate byte-swap instructions
+ * - Single-cycle operation (vs 3-5 for manual swap)
+ * - Cleaner code for network/file I/O
+ * - 2-4x speedup for endian conversion
+ */
+```
+
+### Alignment Requirements
+
+```c
+/* Auto-increment maintains natural alignment */
+LW      r3, (r10)+      /* r10 must be 4-byte aligned, increments by 4 */
+LH      r4, (r11)+      /* r11 must be 2-byte aligned, increments by 2 */
+LB      r5, (r12)+      /* r12 can be any alignment, increments by 1 */
+
+/* Byte-reversed loads also require natural alignment */
+LWBRX   r6, (r13)       /* r13 must be 4-byte aligned */
+LHBRX   r7, (r14)       /* r14 must be 2-byte aligned */
+
+/* Unaligned access generates exception */
+```
+
+### Comparison with Other Architectures
+
+```
+DLX          ARM          PowerPC       x86
+────────────────────────────────────────────────
+LW (r3)+     LDR r3,[r4]! LWZU r3,4(r4) MOV EAX,[EDI] ; INC EDI
+LWBRX r3,(r4) REV r3,r3   LWBRX r3,0,r4 BSWAP EAX
+SW -(sp)     STR r3,[sp,#-4]! STWU r3,-4(sp) PUSH EAX
+```
+
+### Summary
+
+**Endian-Swapping Load/Store**:
+- LWBRX/LHBRX/LDBRX: Load with byte reversal
+- STWBRX/STHBRX/STDBRX: Store with byte reversal
+- PowerPC-compatible instruction naming
+- Single-cycle operation
+- Network and file I/O optimization
+
+**Auto-Increment/Decrement**:
+- Post-increment: (rs)+ - use address, then increment
+- Pre-increment: +(rs) - increment, then use address
+- Post-decrement: (rs)- - use address, then decrement
+- Pre-decrement: -(rs) - decrement, then use address
+- ARM-compatible syntax
+- Reduced code size and register pressure
+
+**Combined Benefits**:
+- All instructions can combine endian swap with auto-inc/dec
+- Efficient network packet processing
+- Fast string and memory operations
+- Optimized stack frame management
+- Cross-platform data structure handling
+
+## 17. Instruction Encoding Summary
 
 ### Opcode Space Allocation
 
