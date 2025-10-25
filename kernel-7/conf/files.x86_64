@@ -6,8 +6,27 @@ OPTIONS/iplmeas			optional iplmeas
 bsd/dev/vol.c			optional vol
 
 # x86_64 machine-dependent files
-# These are placeholder entries for x86-64 support
-# Full implementation would require creating these files
+# Core machine-dependent implementations
 
-# Note: x86_64 support is currently a stub for build system integration
-# Many of these files would need to be created for full x86-64 functionality
+machdep/x86_64/machdep.c	standard
+machdep/x86_64/pmap.c		standard
+machdep/x86_64/trap.c		standard
+machdep/x86_64/pcb.c		standard
+
+# BSD layer device support
+
+bsd/dev/x86_64/conf.c		standard
+bsd/dev/x86_64/cons.c		standard
+
+# Note: This is a basic x86-64 implementation with stub functions.
+# Full implementation would require:
+# - Startup/bootstrap code (start.s, locore.s)
+# - IDT/GDT management (idt.c, gdt.c)
+# - Interrupt handling (intr.c)
+# - I/O primitives (io_prim.c)
+# - Memory management helpers (vm_machdep.c)
+# - FPU/SSE support (fp_support.c, fpu.s)
+# - System call interface (machdep_call.c, sys_machdep.c)
+# - Context switching (cswtch.s)
+# - APIC/interrupt controller support
+# - Device drivers
