@@ -95,13 +95,15 @@ This document tracks the implementation status of complete MMIX (64-bit RISC arc
    - MMIX-CCTOOLS.md: cctools implementation details
    - MMIX-64BIT-STATUS.md: Original 64-bit status tracking
 
-### Phase 2: Linker Input (pass1.c) ⏳ 85% COMPLETE
+### Phase 2: Linker Input (pass1.c) ⏳ 90% COMPLETE
 **Files**: `cctools-2/ld/objects.h`, `cctools-2/ld/pass1.c`
 **Commits**:
 - ff1fbb08 "Add 64-bit Mach-O detection and infrastructure to linker (Phase 2a)"
 - 132cd69a "Add LC_SEGMENT_64 load command processing to linker (Phase 2b)"
-**Status**: Infrastructure complete, LC_SEGMENT_64 implemented, symbol table handling remains
+- f3e75ad7 "Update LC_SYMTAB handler for 64-bit symbol tables (Phase 2c partial)"
+**Status**: Main object path complete, symbol reading/merging functions remain
 **Priority**: HIGH (required for end-to-end functionality)
+**See**: `PHASE2-COMPLETION-SUMMARY.md` for detailed analysis
 
 #### Completed Changes:
 1. **Header Reading** ✅ DONE (Phase 2a - ff1fbb08)
@@ -129,28 +131,32 @@ This document tracks the implementation status of complete MMIX (64-bit RISC arc
    - ✅ Calls swap_mach_header_64() for 64-bit headers
    - ✅ Calls swap_segment_command_64() for 64-bit segments
    - ✅ Calls swap_section_64() for 64-bit sections
-   - ⏳ TODO: swap_nlist_64() for symbol tables
+   - ⏳ TODO: swap_nlist_64() for symbol tables (in symbol reading code)
 
-#### Remaining Work (Phase 2c - ~15% remaining):
-1. **Symbol Table Reading** ⏳ IN PROGRESS
-   - Update LC_SYMTAB handler to detect nlist_64 symbol tables
-   - Calculate correct symbol table size (cur_obj->is_64bit ? nlist_64 : nlist)
-   - Add symbol table swapping for 64-bit
+5. **Symbol Table Validation** ✅ DONE (Phase 2c - f3e75ad7)
+   - ✅ LC_SYMTAB handler uses correct size (nlist_64 vs nlist)
+   - ✅ Validates 16-byte vs 12-byte symbol table entries
+   - **Note**: symtab_command is same for 32/64-bit, only entries differ
 
-2. **Symbol Merging Functions**
-   - Update `merge_symbols()` for 64-bit symbol values
+#### Remaining Work (Phase 2c - ~10% remaining):
+1. **Symbol Table Reading** ⏳ NEXT
+   - Update functions that read symbol tables from files
+   - Detect is_64bit and read nlist_64 vs nlist entries
+   - Apply swap_nlist_64() for byte swapping
+   - Estimated: ~50 lines
+
+2. **Symbol Merging Functions** ⏳ NEXT
+   - Update `merge_symbols()` for 64-bit symbol values (n_value is 64-bit)
    - Update `check_symbol()` for 64-bit n_value field
    - Handle undefined symbol maps with 64-bit
+   - Estimated: ~50 lines
 
-3. **Other Functions in pass1.c**
-   - Add LC_SEGMENT_64 handling in:
-     - Line ~4027: Another LC_SEGMENT switch case
-     - Line ~4339: Yet another LC_SEGMENT switch case
-   - These appear to be in different validation/processing contexts
-
-4. **Dynamic Library Support**
-   - Update `merge_dylibs()` for dylib_module_64
-   - Handle 64-bit dylib tables if present
+3. **Base Program Functions** (Lower priority)
+   - Update `merge_base_program()` (line ~3974) for 64-bit base programs
+   - Update `collect_base_obj_segments()` (line ~4336) for 64-bit
+   - These handle already-loaded programs, not object files
+   - Can be deferred to Phase 2d
+   - Estimated: ~100 lines
 
 #### Key Design Decisions:
 - **section_maps casting**: Stores section_64* as section* to avoid duplicating
@@ -378,17 +384,26 @@ if (is_64bit) {
 
 ### 2025-10-25 (Current Session)
 - ✅ Completed Phase 1: Assembler 64-bit support (e76e83e0)
+  - Full 64-bit Mach-O output generation
+  - 265 insertions, 85 deletions in write_object.c
 - ✅ Created comprehensive status document (a42cbe2f)
-- ✅ Completed Phase 2a: Linker 64-bit detection infrastructure (ff1fbb08)
+- ✅ Completed Phase 2a: Linker detection infrastructure (ff1fbb08)
   - Added is_64bit field to object_file structure
   - Implemented MH_MAGIC_64 detection
   - Extracted unified header field access
+  - 94 insertions, 38 deletions
 - ✅ Completed Phase 2b: LC_SEGMENT_64 processing (132cd69a)
-  - Added complete segment_command_64 handler (~180 lines)
-  - Implemented section_64 validation and storage
-  - Byte swapping for all 64-bit structures
-- ⏳ Phase 2c: Symbol table handling (15% remaining)
-- **Progress**: Phase 2 is 85% complete
+  - Complete segment_command_64 handler (~180 lines)
+  - section_64 validation and storage
+  - Byte swapping for 64-bit structures
+  - 179 insertions, 1 deletion
+- ✅ Completed Phase 2c (partial): Symbol table validation (f3e75ad7)
+  - LC_SYMTAB handler for nlist_64
+  - Correct size validation (16-byte vs 12-byte)
+  - 13 insertions, 3 deletions
+- ✅ Created Phase 2 completion summary document
+- ⏳ Phase 2c remaining: Symbol reading/merging (~10%)
+- **Progress**: Phase 2 is 90% complete
 
 ### Previous Sessions
 - Created all MMIX support files (assembler, linker, disassembler)
