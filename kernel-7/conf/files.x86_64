@@ -16,6 +16,7 @@ machdep/x86_64/cswtch.s		standard
 # Initialization and configuration
 machdep/x86_64/x86_64_init.c	standard
 machdep/x86_64/machdep.c	standard
+machdep/x86_64/genassym.c	standard
 
 # Descriptor tables
 machdep/x86_64/gdt.c		standard
@@ -27,31 +28,52 @@ machdep/x86_64/vm_machdep.c	standard
 
 # Trap and exception handling
 machdep/x86_64/trap.c		standard
+machdep/x86_64/intr.c		standard
 
 # Process/thread management
 machdep/x86_64/pcb.c		standard
 
 # System call interface
 machdep/x86_64/sys_machdep.c	standard
+machdep/x86_64/machdep_call.c	standard
+
+# I/O primitives
+machdep/x86_64/io_prim.c	standard
+
+# Clock and timer support
+machdep/x86_64/machine_clock.c	standard
+
+# Kernel utilities
+machdep/x86_64/kern_machdep.c	standard
+
+# Unix/BSD support
+machdep/x86_64/unix_startup.c	standard
+machdep/x86_64/unix_signal.c	standard
 
 # BSD layer device support
 bsd/dev/x86_64/conf.c		standard
 bsd/dev/x86_64/cons.c		standard
 
 # Note: This x86-64 implementation now includes:
-# ✓ Startup code (start.s, locore.s)
-# ✓ Low-level assembly routines (locore.s)
-# ✓ Context switching (cswtch.s)
-# ✓ IDT/GDT management (idt.c, gdt.c)
-# ✓ Memory management (pmap.c, vm_machdep.c)
-# ✓ System call interface (sys_machdep.c)
-# ✓ Exception/interrupt handling (trap.c)
-# ✓ CPU initialization (x86_64_init.c)
+# ✓ Startup code (start.s, locore.s, cswtch.s)
+# ✓ Low-level assembly routines (locore.s) - I/O, MSR, TLB, FPU, etc.
+# ✓ Context switching (cswtch.s) - full thread state save/restore
+# ✓ IDT/GDT management (idt.c, gdt.c) - 256 interrupt vectors, TSS
+# ✓ Memory management (pmap.c, vm_machdep.c) - VM primitives, TLB
+# ✓ System call interface (sys_machdep.c, machdep_call.c)
+# ✓ Exception/interrupt handling (trap.c, intr.c)
+# ✓ CPU initialization (x86_64_init.c) - CPUID, MSR setup
+# ✓ I/O primitives (io_prim.c) - port I/O, MMIO
+# ✓ Clock/timer support (machine_clock.c) - PIT, TSC, RTC
+# ✓ Kernel utilities (kern_machdep.c) - reboot, panic, CPU info
+# ✓ Unix/BSD support (unix_startup.c, unix_signal.c)
+# ✓ genassym.c - generates assembly offsets
 #
 # Still needed for complete implementation:
-# - Full page table implementation (4-level paging)
-# - APIC/interrupt controller support
+# - Full 4-level page table implementation (PML4/PDPT/PD/PT)
+# - APIC/interrupt controller support (currently stubs)
 # - Complete FPU/SSE/AVX state management
-# - SMP support
+# - SMP support (multi-processor)
 # - Device drivers (keyboard, display, disk, network)
 # - Power management (ACPI)
+# - Performance optimization
