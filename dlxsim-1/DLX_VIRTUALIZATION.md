@@ -599,7 +599,7 @@ typedef struct {
         int socket_id;      /* Physical socket */
         int core_id;        /* Core within socket */
         int thread_id;      /* Thread within core */
-        int apic_id;        /* APIC ID */
+        int aic_id;         /* AIC ID */
         int numa_node;      /* NUMA node */
     } cpus[MAX_CPUS];
 } cpu_topology_t;
@@ -611,8 +611,8 @@ typedef struct {
     int running;
     pthread_t thread;       /* Host thread */
 
-    /* Local APIC */
-    apic_t *lapic;
+    /* Local AIC */
+    struct aic_cpu_regs *aic;
 
     /* Cache */
     struct {
@@ -1336,7 +1336,7 @@ typedef struct {
 ### Phase 3: Advanced Features
 1. **SMP Support**
    - Multi-CPU execution
-   - Local APIC emulation
+   - AIC per-CPU interrupt handling
    - IPI mechanism
 
 2. **VirtIO Devices**
