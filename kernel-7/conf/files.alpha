@@ -82,6 +82,11 @@ machdep/alpha/pci.c		standard
 machdep/alpha/isa.c		standard
 machdep/alpha/rtc_nvram.c	standard
 
+# Device drivers
+machdep/alpha/serial.c		standard
+machdep/alpha/keyboard.c	standard
+machdep/alpha/ide.c		standard
+
 # BSD Alpha-specific files
 bsd/dev/alpha/conf.c		standard
 bsd/dev/alpha/cons.c		standard

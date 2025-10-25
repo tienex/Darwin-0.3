@@ -102,6 +102,7 @@ void
 alpha_interrupt_handler(alpha_saved_state_t *state)
 {
 	unsigned long ipl;
+	extern void alpha_isa_interrupt_handler(void);
 
 	/*
 	 * Read current interrupt priority level
@@ -113,12 +114,13 @@ alpha_interrupt_handler(alpha_saved_state_t *state)
 	 */
 	switch (ipl) {
 	case ALPHA_IPL_CLOCK:
-		/* Handle clock interrupt */
-		/* rtclock_intr(); */
+		/* Handle clock interrupt via ISA PIC */
+		alpha_isa_interrupt_handler();
 		break;
 
 	case ALPHA_IPL_IO:
-		/* Handle I/O device interrupt */
+		/* Handle I/O device interrupt via ISA PIC */
+		alpha_isa_interrupt_handler();
 		break;
 
 	case ALPHA_IPL_SOFT:
@@ -126,7 +128,8 @@ alpha_interrupt_handler(alpha_saved_state_t *state)
 		break;
 
 	default:
-		/* Unknown interrupt */
+		/* Unknown interrupt - still check ISA */
+		alpha_isa_interrupt_handler();
 		break;
 	}
 }

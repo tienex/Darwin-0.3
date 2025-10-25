@@ -184,28 +184,119 @@ alpha_dma_init(void)
 }
 
 /*
+ * Read ISA IRQ from PIC
+ */
+static int
+alpha_isa_read_irq(void)
+{
+	unsigned char master_isr, slave_isr;
+	int irq;
+
+	/* Read In-Service Register from master PIC */
+	outb(0x0B, PIC_MASTER_CMD);  /* Read ISR command */
+	master_isr = inb(PIC_MASTER_CMD);
+
+	if (master_isr == 0)
+		return -1;  /* No interrupt */
+
+	/* Find highest priority interrupt */
+	for (irq = 0; irq < 8; irq++) {
+		if (master_isr & (1 << irq)) {
+			/* Check if it's the cascade */
+			if (irq == ISA_IRQ_CASCADE) {
+				/* Read slave PIC */
+				outb(0x0B, PIC_SLAVE_CMD);
+				slave_isr = inb(PIC_SLAVE_CMD);
+
+				/* Find interrupt on slave */
+				for (irq = 8; irq < 16; irq++) {
+					if (slave_isr & (1 << (irq - 8)))
+						return irq;
+				}
+			} else {
+				return irq;
+			}
+		}
+	}
+
+	return -1;  /* Spurious interrupt */
+}
+
+/*
+ * ISA interrupt handler dispatcher
+ *
+ * Called from alpha_interrupt_handler in trap.c
+ */
+void
+alpha_isa_interrupt_handler(void)
+{
+	int irq;
+
+	/* Determine which IRQ fired */
+	irq = alpha_isa_read_irq();
+	if (irq < 0)
+		return;  /* Spurious interrupt */
+
+	/* Dispatch to device-specific handler */
+	alpha_isa_interrupt(irq);
+}
+
+/*
  * ISA interrupt handler
  */
 void
 alpha_isa_interrupt(int irq)
 {
-	/* Handle ISA interrupt */
+	extern void rtclock_intr(void);
+	extern void alpha_keyboard_interrupt(void);
+	extern void alpha_serial_interrupt(int);
+	extern void alpha_ide_interrupt(int);
 
+	/* Handle ISA interrupt */
 	switch (irq) {
 	case ISA_IRQ_TIMER:
-		/* Handle timer interrupt */
+		/* System timer (PIT) */
+		rtclock_intr();
 		break;
 
 	case ISA_IRQ_KEYBOARD:
-		/* Handle keyboard interrupt */
+		/* Keyboard controller */
+		alpha_keyboard_interrupt();
+		break;
+
+	case ISA_IRQ_SERIAL1:
+		/* COM1 */
+		alpha_serial_interrupt(4);
+		break;
+
+	case ISA_IRQ_SERIAL2:
+		/* COM2 */
+		alpha_serial_interrupt(3);
 		break;
 
 	case ISA_IRQ_RTC:
-		/* Handle RTC interrupt */
+		/* Real-time clock (periodic interrupt) */
+		/* alpha_rtc_periodic_interrupt(); */
+		break;
+
+	case ISA_IRQ_MOUSE:
+		/* PS/2 mouse */
+		/* alpha_mouse_interrupt(); */
+		break;
+
+	case ISA_IRQ_IDE_PRIMARY:
+		/* Primary IDE controller */
+		alpha_ide_interrupt(14);
+		break;
+
+	case ISA_IRQ_IDE_SECONDARY:
+		/* Secondary IDE controller */
+		alpha_ide_interrupt(15);
 		break;
 
 	default:
 		/* Unknown interrupt */
+		printf("Unexpected ISA IRQ %d\n", irq);
 		break;
 	}
 
