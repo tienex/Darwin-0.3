@@ -43,61 +43,72 @@
  */
 typedef unsigned int		pt_entry_t;
 
-/* PTE bit definitions */
-#define DLX_PTE_VALID		0x80000000	/* Valid bit */
-#define DLX_PTE_DIRTY		0x40000000	/* Dirty (modified) bit */
-#define DLX_PTE_REFERENCE	0x20000000	/* Referenced bit */
-#define DLX_PTE_WRITE		0x10000000	/* Writable */
-#define DLX_PTE_USER		0x08000000	/* User accessible */
-#define DLX_PTE_GLOBAL		0x04000000	/* Global (not ASID-specific) */
-#define DLX_PTE_CACHED		0x02000000	/* Cached */
-#define DLX_PTE_PFN_MASK	0x000FFFFF	/* Physical frame number (20 bits) */
-
-#define DLX_PTE_PFN_SHIFT	12		/* Shift to get PFN */
+/* PTE bit definitions (matches DLXSIM specification) */
+#define DLX_PTE_VALID		0x00000001	/* Valid bit */
+#define DLX_PTE_DIRTY		0x00000002	/* Dirty (modified) bit */
+#define DLX_PTE_REFERENCE	0x00000004	/* Referenced bit */
+#define DLX_PTE_MASK		(~0x7)		/* Physical address mask */
+#define DLX_PTE_PFN_SHIFT	13		/* Shift to get PFN (8KB pages) */
 
 /*
- * Two-level page table structure
+ * Two-level page table structure (configurable via special registers)
+ * Default DLXSIM configuration:
+ *   L1 page size: 512KB (2^19) - 32 entries for 16MB total
+ *   L2 page size: 8KB (2^13) - 64 entries per L2 table
  * Virtual address breakdown (32 bits):
- *   bits 31-22: Page directory index (10 bits, 1024 entries)
- *   bits 21-12: Page table index (10 bits, 1024 entries)
- *   bits 11-0:  Offset within page (12 bits, 4096 bytes)
+ *   bits 31-19: L1 index (13 bits)
+ *   bits 18-13: L2 index (6 bits)
+ *   bits 12-0:  Offset within page (13 bits, 8192 bytes)
  */
-#define DLX_PD_SHIFT		22		/* Page directory shift */
-#define DLX_PT_SHIFT		12		/* Page table shift */
-#define DLX_PD_MASK		0x3FF		/* 10 bits for PD index */
-#define DLX_PT_MASK		0x3FF		/* 10 bits for PT index */
+#define DLX_L1_PAGE_SIZE_BITS	19		/* L1 entry maps 512KB */
+#define DLX_L2_PAGE_SIZE_BITS	13		/* L2 entry maps 8KB */
+#define DLX_L1_MAX_ENTRIES	32		/* 32 L1 entries */
+#define DLX_L2_MAX_ENTRIES	64		/* 64 L2 entries per table */
 
-#define DLX_PTES_PER_PAGE	1024		/* PTEs per page table */
-#define DLX_PDES_PER_PAGE	1024		/* PDEs per page directory */
+#define DLX_PAGE_SIZE		(1 << DLX_L2_PAGE_SIZE_BITS)
+#define DLX_PAGE_MASK		(DLX_PAGE_SIZE - 1)
 
 /* Extract indices from virtual address */
-#define dlx_pd_index(va)	(((va) >> DLX_PD_SHIFT) & DLX_PD_MASK)
-#define dlx_pt_index(va)	(((va) >> DLX_PT_SHIFT) & DLX_PT_MASK)
+#define dlx_l1_index(va)	((va) >> DLX_L1_PAGE_SIZE_BITS)
+#define dlx_l2_index(va)	(((va) >> DLX_L2_PAGE_SIZE_BITS) & (DLX_L2_MAX_ENTRIES - 1))
 
 /*
  * DLX TLB Entry Structure
- * Software-managed TLB with 64 entries (typical for DLX)
+ * Fully associative software-managed TLB (typical: 16-64 entries)
+ * Supports variable page sizes per entry
  */
 #define DLX_TLB_ENTRIES		64
 
 typedef struct dlx_tlb_entry {
-	unsigned int	virtual_page;		/* Virtual page number + ASID */
-	unsigned int	physical_page;		/* Physical page + attributes */
+	unsigned int	virtual_page;		/* Virtual page + entry flags */
+	unsigned int	physical_page;		/* Physical page + page size */
 } dlx_tlb_entry_t;
 
-/* TLB virtual page fields */
-#define DLX_TLB_VPN_MASK	0xFFFFF000	/* Virtual page number */
-#define DLX_TLB_ASID_MASK	0x00000FFF	/* Address Space ID (12 bits) */
-#define DLX_TLB_ASID_SHIFT	0
+/* TLB entry page size encoding (in physical_page low bits) */
+#define DLX_TLB_ENTRY_PAGESIZE_MASK	0x1F	/* Page size: 1 << (value) */
 
-/* TLB physical page fields (same as PTE bits) */
-#define DLX_TLB_PFN_MASK	DLX_PTE_PFN_MASK
+/* TLB uses same flags as PTEs */
 #define DLX_TLB_VALID		DLX_PTE_VALID
 #define DLX_TLB_DIRTY		DLX_PTE_DIRTY
-#define DLX_TLB_WRITE		DLX_PTE_WRITE
-#define DLX_TLB_USER		DLX_PTE_USER
-#define DLX_TLB_GLOBAL		DLX_PTE_GLOBAL
-#define DLX_TLB_CACHED		DLX_PTE_CACHED
+#define DLX_TLB_REFERENCE	DLX_PTE_REFERENCE
+
+/*
+ * DLX Status Register Flags (from DLXSIM specification)
+ */
+#define DLX_STATUS_INTRMASK	0x0f	/* Interrupt mask (4 bits) */
+#define DLX_STATUS_FPTRUE	0x20	/* FP comparison was true */
+#define DLX_STATUS_SYSMODE	0x40	/* System (kernel) mode */
+#define DLX_STATUS_PAGE_TABLE	0x100	/* Use page table translation */
+#define DLX_STATUS_TLB		0x200	/* Use TLB translation */
+
+/*
+ * DLX Special Registers (for MMU configuration)
+ */
+#define DLX_SREG_STATUS		0	/* Status register */
+#define DLX_SREG_PGTBL_BASE	1	/* Page table base address */
+#define DLX_SREG_PGTBL_BITS	2	/* Page size config (L1|L2) */
+#define DLX_SREG_PGTBL_SIZE	3	/* Page table size */
+#define DLX_SREG_FAULT_ADDR	4	/* Faulting address */
 
 /*
  * Physical map structure
@@ -106,8 +117,10 @@ typedef struct dlx_tlb_entry {
 struct pmap {
 	decl_simple_lock_data(, lock)		/* Lock on map */
 	int		ref_count;		/* Reference count */
-	pt_entry_t	*page_directory;	/* Page directory pointer */
-	unsigned int	asid;			/* Address Space ID for TLB */
+	pt_entry_t	*page_directory;	/* L1 page table pointer */
+	unsigned int	pgtbl_base;		/* Page table base (SREG) */
+	unsigned int	pgtbl_bits;		/* Page size config (SREG) */
+	unsigned int	pgtbl_size;		/* Page table size (SREG) */
 	struct pmap	*next;			/* Linked list of free pmaps */
 	struct pmap_statistics stats;		/* Statistics */
 
@@ -123,15 +136,6 @@ typedef struct pmap *pmap_t;
 extern pmap_t	kernel_pmap;			/* The kernel's map */
 
 /*
- * ASID management
- * ASIDs are used to tag TLB entries with address space IDs
- * to avoid flushing the entire TLB on context switch
- */
-#define DLX_ASID_KERNEL		0		/* Kernel ASID */
-#define DLX_ASID_MAX		4095		/* Max ASID (12 bits) */
-#define DLX_ASID_FIRST_USER	1		/* First user ASID */
-
-/*
  * Macros for pmap operations
  */
 #define	PMAP_SWITCH_USER(th, map, my_cpu) th->map = map;
@@ -143,16 +147,13 @@ extern pmap_t	kernel_pmap;			/* The kernel's map */
 	(((VA) >= VM_MIN_KERNEL_ADDRESS) && ((VA) <= VM_MAX_KERNEL_ADDRESS))
 
 /*
- * TLB management mode
- * Allows runtime selection between page table only, TLB only, or both
+ * MMU mode configuration
+ * The DLX status register flags control MMU behavior:
+ * - DLX_STATUS_PAGE_TABLE (0x100): Enable page table translation
+ * - DLX_STATUS_TLB (0x200): Enable TLB translation
+ * - Both flags can be set simultaneously for hybrid mode
  */
-typedef enum {
-	DLX_MMU_MODE_PAGE_TABLES_ONLY = 0,	/* Use only page tables (no TLB) */
-	DLX_MMU_MODE_TLB_ONLY = 1,		/* Use only TLB (no page tables) */
-	DLX_MMU_MODE_BOTH = 2			/* Use both page tables and TLB */
-} dlx_mmu_mode_t;
-
-extern dlx_mmu_mode_t dlx_mmu_mode;
+extern unsigned int dlx_status_register;
 
 /*
  * Function prototypes
@@ -162,29 +163,24 @@ extern dlx_mmu_mode_t dlx_mmu_mode;
 void		dlx_tlb_init(void);
 void		dlx_tlb_flush(void);
 void		dlx_tlb_flush_entry(vm_offset_t va);
-void		dlx_tlb_flush_asid(unsigned int asid);
-int		dlx_tlb_lookup(vm_offset_t va, unsigned int asid,
-				dlx_tlb_entry_t *entry);
-void		dlx_tlb_insert(vm_offset_t va, unsigned int asid,
-				pt_entry_t pte);
-void		dlx_tlb_remove(vm_offset_t va, unsigned int asid);
-void		dlx_tlb_update(vm_offset_t va, unsigned int asid,
-				pt_entry_t pte);
+int		dlx_tlb_lookup(vm_offset_t va, unsigned int *phys_page);
+void		dlx_tlb_insert(vm_offset_t va, pt_entry_t pte, unsigned int page_size_bits);
+void		dlx_tlb_remove(vm_offset_t va);
 
 /* Exception handlers */
-void		dlx_tlb_miss_handler(vm_offset_t va, int is_write);
-void		dlx_tlb_mod_handler(vm_offset_t va);
+void		dlx_pagefault_handler(vm_offset_t va, int is_write);
+void		dlx_tlbfault_handler(vm_offset_t va, int is_write);
 
 /* PMAP activation/deactivation */
 void		dlx_pmap_activate(pmap_t pmap, thread_t th, int cpu);
 void		dlx_pmap_deactivate(pmap_t pmap, thread_t th, int cpu);
 
-/* ASID management */
-unsigned int	dlx_asid_alloc(pmap_t pmap);
-void		dlx_asid_free(unsigned int asid);
-
 /* Page table utilities */
 pt_entry_t	*dlx_pte_lookup(pmap_t pmap, vm_offset_t va);
 pt_entry_t	*dlx_pte_allocate(pmap_t pmap, vm_offset_t va);
+
+/* Memory translation */
+int		dlx_translate_address(vm_offset_t vaddr, vm_offset_t *paddr,
+				int is_write);
 
 #endif	/* _DLX_PMAP_H_ */

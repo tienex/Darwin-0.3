@@ -40,10 +40,11 @@ typedef natural_t		vm_offset_t;
 typedef natural_t		vm_size_t;
 
 /*
- * DLX page size is 4KB (4096 bytes)
+ * DLX page size is 8KB (8192 bytes)
+ * This matches the default DLXSIM configuration
  */
-#define DLX_PGBYTES		4096		/* bytes per DLX page */
-#define DLX_PGSHIFT		12		/* log2(DLX_PGBYTES) */
+#define DLX_PGBYTES		8192		/* bytes per DLX page */
+#define DLX_PGSHIFT		13		/* log2(DLX_PGBYTES) */
 
 #define PAGE_SIZE		DLX_PGBYTES
 #define PAGE_SHIFT		DLX_PGSHIFT
