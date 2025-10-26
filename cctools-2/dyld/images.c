@@ -497,6 +497,7 @@ unsigned long *entry_point)
 	object_image->image.vmaddr_size = 0;
 	object_image->image.seg1addr = seg1addr;
 	object_image->image.mh = mh;
+	object_image->image.is_64bit = (mh->magic == MH_MAGIC_64) ? TRUE : FALSE;
 	object_image->image.st = st;
 	object_image->image.dyst = dyst;
 	object_image->image.linkedit_segment = linkedit_segment;
@@ -860,7 +861,7 @@ char *dylib_name)
 		goto load_library_image_cleanup1;
 	    }
 	    mh = (struct mach_header *)(file_addr + best_fat_arch->offset);
-	    if(mh->magic != MH_MAGIC){
+	    if(mh->magic != MH_MAGIC && mh->magic != MH_MAGIC_64){
 		error("malformed library: %s (not a Mach-O file, bad magic "
 		    "number)", dylib_name);
 		link_edit_error(DYLD_FILE_FORMAT, EBADMACHO, dylib_name);
@@ -883,12 +884,12 @@ char *dylib_name)
 		goto load_library_image_cleanup1;
 	    }
 	    mh = (struct mach_header *)file_addr;
-	    if(mh->magic == SWAP_LONG(MH_MAGIC)){
+	    if(mh->magic == SWAP_LONG(MH_MAGIC) || mh->magic == SWAP_LONG(MH_MAGIC_64)){
 		error("bad CPU type in library: %s", dylib_name);
 		link_edit_error(DYLD_FILE_FORMAT, EBADMACHO, dylib_name);
 		goto load_library_image_cleanup1;
 	    }
-	    if(mh->magic != MH_MAGIC){
+	    if(mh->magic != MH_MAGIC && mh->magic != MH_MAGIC_64){
 		error("malformed library: %s (not a Mach-O file, bad magic "
 		    "number)", dylib_name);
 		link_edit_error(DYLD_FILE_FORMAT, EBADMACHO, dylib_name);
@@ -1182,6 +1183,7 @@ ino_t ino)
 	library_image->image.vmaddr_size = high_addr - low_addr;
 	library_image->image.seg1addr = seg1addr;
 	library_image->image.mh = mh;
+	library_image->image.is_64bit = (mh->magic == MH_MAGIC_64) ? TRUE : FALSE;
 	library_image->image.st = st;
 	library_image->image.dyst = dyst;
 	library_image->image.linkedit_segment = linkedit_segment;
@@ -1341,7 +1343,7 @@ unsigned long object_size)
 	    return(NULL);
 	}
 	mh = (struct mach_header *)object_addr;
-	if(mh->magic != MH_MAGIC){
+	if(mh->magic != MH_MAGIC && mh->magic != MH_MAGIC_64){
 	    error("malformed object file image: %s (not a Mach-O image, bad "
 		"magic number)", name);
 	    link_edit_error(DYLD_FILE_FORMAT, EBADMACHO, name);
@@ -1384,6 +1386,7 @@ unsigned long object_size)
 	object_image->image.vmaddr_size = high_addr - low_addr;
 	object_image->image.seg1addr = seg1addr;
 	object_image->image.mh = mh;
+	object_image->image.is_64bit = (mh->magic == MH_MAGIC_64) ? TRUE : FALSE;
 	object_image->image.st = st;
 	object_image->image.dyst = dyst;
 	object_image->image.linkedit_segment = linkedit_segment;
