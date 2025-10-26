@@ -83,6 +83,12 @@ typedef struct machine_info	machine_info_data_t;	/* bogus */
 typedef integer_t	cpu_type_t;
 typedef integer_t	cpu_subtype_t;
 
+/*
+ *	Capability bits used in the definition of cpu_type.
+ */
+#define	CPU_ARCH_MASK	0xff000000		/* mask for architecture bits */
+#define CPU_ARCH_ABI64	0x01000000		/* 64 bit ABI */
+
 #define CPU_STATE_MAX		3
 
 #define CPU_STATE_USER		0
@@ -132,7 +138,7 @@ extern vm_offset_t		interrupt_stack[];
 /* skip	CPU_TYPE_ALPHA		((cpu_type_t) 16)	*/
 /* skip				((cpu_type_t) 17)	*/
 #define CPU_TYPE_POWERPC		((cpu_type_t) 18)
-#define CPU_TYPE_MMIX			((cpu_type_t) 19)
+#define CPU_TYPE_MMIX			((cpu_type_t) (19 | CPU_ARCH_ABI64))
 
 
 /*
