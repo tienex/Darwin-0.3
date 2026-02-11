@@ -68,6 +68,8 @@ static const NXArchInfo ArchInfoTable[] = {
 	 "PowerPC"},
     {"sparc",  CPU_TYPE_SPARC,   CPU_SUBTYPE_SPARC_ALL,	   NX_BigEndian,
 	 "SPARC"},
+    {"dlx",    CPU_TYPE_DLX,     CPU_SUBTYPE_DLX_ALL,      NX_BigEndian,
+	 "DLX RISC"},
     {"any",    CPU_TYPE_ANY,     CPU_SUBTYPE_MULTIPLE,     NX_UnknownByteOrder,
 	 "Architecture Independent"},
     /* specific architecture implementations */

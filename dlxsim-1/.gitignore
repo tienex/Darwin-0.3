@@ -1,0 +1,25 @@
+# Build artifacts
+dlxsim
+*.o
+*.a
+*.so
+*.dylib
+
+# Editor temporary files
+*~
+*.swp
+*.swo
+.*.swp
+.*.swo
+
+# Debug files
+*.dSYM/
+*.su
+
+# Test outputs
+tests/*.out
+tests/*.log
+
+# OS files
+.DS_Store
+Thumbs.db

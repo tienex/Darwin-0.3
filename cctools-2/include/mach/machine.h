@@ -159,7 +159,8 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_TYPE_RS6000		((cpu_type_t) 17)
 #define CPU_TYPE_MC98000	((cpu_type_t) 18)
 #define CPU_TYPE_POWERPC	((cpu_type_t) 18)
-		
+#define CPU_TYPE_DLX		((cpu_type_t) 19)
+
 
 /*
  *	Machine subtypes (these are defined here, instead of in a machine
@@ -356,5 +357,12 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_SUBTYPE_POWERPC_604e	((cpu_subtype_t) 7)
 #define CPU_SUBTYPE_POWERPC_620		((cpu_subtype_t) 8)
 #define CPU_SUBTYPE_POWERPC_750		((cpu_subtype_t) 9)
+
+/*
+ *	DLX subtypes - Deluxe RISC processor
+ *	Educational RISC architecture by Hennessy & Patterson
+ */
+#define CPU_SUBTYPE_DLX_ALL		((cpu_subtype_t) 0)
+#define CPU_SUBTYPE_DLX_V1		((cpu_subtype_t) 1)
 
 #endif	_MACH_MACHINE_H_
