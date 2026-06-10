@@ -1,0 +1,90 @@
+# MMIX Emulator Build Artifacts and Repositories
+#
+# This file prevents committing emulator source code and build artifacts
+# to the Darwin repository. Emulators should be cloned separately.
+
+# GIMMIX repository and build artifacts
+gimmix/.git/
+gimmix/build/
+gimmix/*.o
+gimmix/*.a
+gimmix/org/*.o
+gimmix/org/*.c
+gimmix/org/*.h
+gimmix/org/mmix-*
+gimmix/org/mmixal
+gimmix/org/mmotype
+gimmix/org/mmmix
+gimmix/lib/*.a
+gimmix/doc/*.pdf
+
+# MMIXware repository and build artifacts
+mmixware/.git/
+mmixware/*.c
+mmixware/*.h
+mmixware/*.tex
+mmixware/*.dvi
+mmixware/*.pdf
+mmixware/*.idx
+mmixware/*.scn
+mmixware/*.log
+mmixware/mmix-sim
+mmixware/mmix-pipe
+mmixware/mmixal
+mmixware/mmotype
+mmixware/mmmix
+mmixware/*.mmix
+mmixware/*.mmo
+mmixware/*.mmb
+
+# Compiled object files
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Test outputs
+*.log
+*.trs
+test-driver
+coverage/
+
+# Temporary files
+*~
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.sublime-*
+.project
+.cproject
+.settings/
+
+# Build directories
+build/
+bin/
+obj/
+dist/
+
+# Keep documentation and specifications
+!*.md
+!*.example
+!Makefile
+!README*

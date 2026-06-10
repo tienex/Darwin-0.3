@@ -86,6 +86,15 @@ load_segment(
 	vm_map_t		map,
 	load_result_t		*result
 ),
+load_segment_64(
+	struct segment_command_64 *scp64,
+	vm_pager_t		pager,
+	unsigned long		pager_offset,
+	unsigned long		macho_size,
+	unsigned long		end_of_file,
+	vm_map_t		map,
+	load_result_t		*result
+),
 load_unixthread(
 	struct thread_command	*tcp,
 	load_result_t		*result
@@ -203,6 +212,8 @@ parse_machfile(
 	vm_size_t		size;
 	int			offset;
 	int			pass;
+	int			is_64bit;
+	unsigned long		hdr_size;
 
 	/*
 	 *	Break infinite recursion
@@ -210,6 +221,12 @@ parse_machfile(
 	if (depth > 6)
 		return(LOAD_FAILURE);
 	depth++;
+
+	/*
+	 *	Detect 64-bit Mach-O files
+	 */
+	is_64bit = (header->magic == MH_MAGIC_64);
+	hdr_size = is_64bit ? sizeof(struct mach_header_64) : sizeof(struct mach_header);
 
 	/*
 	 *	Check to see if right machine type.
@@ -252,13 +269,13 @@ parse_machfile(
 	 *	Map portion that must be accessible directly into
 	 *	kernel's map.
 	 */
-	if ((sizeof (struct mach_header) + header->sizeofcmds) > macho_size)
+	if ((hdr_size + header->sizeofcmds) > macho_size)
 		return(LOAD_BADMACHO);
 
 	/*
 	 *	Round size of Mach-O commands up to page boundry.
 	 */
-	size = round_page(sizeof (struct mach_header) + header->sizeofcmds);
+	size = round_page(hdr_size + header->sizeofcmds);
 	if (size <= 0)
 		return(LOAD_BADMACHO);
 
@@ -276,7 +293,7 @@ parse_machfile(
 	 *	Scan through the commands, processing each one as necessary.
 	 */
 	for (pass = 1; pass <= 2; pass++) {
-		offset = sizeof(struct mach_header);
+		offset = hdr_size;
 		ncmds = header->ncmds;
 		while (ncmds--) {
 			/*
@@ -289,8 +306,7 @@ parse_machfile(
 			 *	Check for valid lcp pointer by checking
 			 *	next offset.
 			 */
-			if (offset > header->sizeofcmds
-					+ sizeof(struct mach_header)) {
+			if (offset > header->sizeofcmds + hdr_size) {
 				vm_map_remove(kernel_map, addr, addr + size);
 				return(LOAD_BADMACHO);
 			}
@@ -304,6 +320,17 @@ parse_machfile(
 					break;
 				ret = load_segment(
 					       (struct segment_command *) lcp,
+						   pager, file_offset,
+						   macho_size,
+						   vp->v_vm_info->vnode_size,
+						   map,
+						   result);
+				break;
+			case LC_SEGMENT_64:
+				if (pass != 1)
+					break;
+				ret = load_segment_64(
+					       (struct segment_command_64 *) lcp,
 						   pager, file_offset,
 						   macho_size,
 						   vp->v_vm_info->vnode_size,
@@ -541,6 +568,171 @@ load_return_t load_segment(
 				      FALSE);
 	}
 	if ( (scp->fileoff == 0) && (scp->filesize != 0) )
+		result->mach_header = dest_addr;
+	return(LOAD_SUCCESS);
+}
+
+static
+load_return_t load_segment_64(
+	struct segment_command_64 *scp64,
+	vm_pager_t		pager,
+	unsigned long		pager_offset,
+	unsigned long		macho_size,
+	unsigned long		end_of_file,
+	vm_map_t		map,
+	load_result_t		*result
+)
+{
+	int			vmsize, copyoffset, copysize;
+	kern_return_t		ret;
+	vm_offset_t		dest_addr, src_addr;
+	vm_map_t		temp_map;
+
+	/*
+	 * Make sure what we get from the file is really ours (as specified
+	 * by macho_size).
+	 */
+	if (scp64->fileoff + scp64->filesize > macho_size)
+		return (LOAD_BADMACHO);
+
+	/*
+	 *	Round segment size to page size and check validity.
+	 */
+	vmsize = round_page(scp64->vmsize);
+	if (vmsize < 0)
+		return(LOAD_BADMACHO);
+
+	if (vmsize == 0)
+		return(KERN_SUCCESS);
+
+	/*
+	 *	Truncate address to page boundry and check validity
+	 *	by allocating the space in the map.
+	 */
+	dest_addr = trunc_page(scp64->vmaddr);
+	ret = vm_map_find(map, VM_OBJECT_NULL, (vm_offset_t)0,
+			  &dest_addr, vmsize, FALSE);
+
+	if (ret != KERN_SUCCESS)
+		return(LOAD_NOSPACE);
+
+	/*
+	 *	Map file into a temporary map.
+	 */
+	copysize = round_page(scp64->filesize);
+	copyoffset = scp64->fileoff + pager_offset;
+
+	if (copysize < 0)
+		return(LOAD_BADMACHO);
+
+	if (copysize > 0) {
+		temp_map = vm_map_create(pmap_create(copysize),
+				 VM_MIN_ADDRESS, VM_MIN_ADDRESS + copysize,
+				 TRUE);
+		src_addr = VM_MIN_ADDRESS;
+		ret = vm_allocate_with_pager(temp_map, &src_addr, copysize,
+					     FALSE, pager, copyoffset);
+		if (ret != KERN_SUCCESS) {
+			vm_map_deallocate(temp_map);
+			return(LOAD_NOSPACE);
+		}
+
+		/*
+		 *	If last page is not complete, we need to zero fill
+		 *	it.
+		 *
+		 *	OPTIMIZATION:
+		 *	If we have a pointer to the vnode we are paging
+		 *	from, we can optimize the zero-fill if we are at
+		 *	the end-of-file because the vnode pager semantics
+		 *	assure that bytes after the end-of-file will be zero.
+		 *
+		 *	FIXME:
+		 *	Figure out if we can optimize away zeroing the end
+		 *	of a Mach-O within a fat file.
+		 *
+		 */
+		if (copysize != scp64->filesize
+		    && (end_of_file == 0
+			|| copyoffset + scp64->filesize != end_of_file)) {
+			vm_offset_t	tmp_addr;
+			int		trunc_addr;
+
+			trunc_addr = trunc_page(scp64->filesize);
+			/*
+			 *	Allocate some space accessible to the kernel.
+			 */
+			tmp_addr = 0;
+			ret = vm_map_find(kernel_map, VM_OBJECT_NULL,
+					  (vm_offset_t)0, &tmp_addr,
+					  PAGE_SIZE, TRUE);
+			if (ret != KERN_SUCCESS) {
+				vm_map_deallocate(temp_map);
+				return(LOAD_NOSPACE);
+			}
+			/*
+			 *	Copy last page into kernel.
+			 */
+			ret = vm_map_copy(kernel_map, temp_map,
+				tmp_addr, PAGE_SIZE, trunc_addr,
+				FALSE, FALSE);
+			if (ret != KERN_SUCCESS) {
+				vm_deallocate(kernel_map, tmp_addr, PAGE_SIZE);
+				vm_map_deallocate(temp_map);
+				return(LOAD_FAILURE);
+			}
+			/*
+			 *	Zero appropriate bytes in copy-on-write copy.
+			 */
+			bzero(tmp_addr + (scp64->filesize - trunc_addr),
+				copysize - scp64->filesize);
+			/*
+			 *	Copy new data back to user task map.
+			 */
+			ret = vm_map_copy(map, kernel_map,
+				dest_addr + trunc_addr, PAGE_SIZE, tmp_addr,
+				FALSE, FALSE);
+			vm_deallocate(kernel_map, tmp_addr, PAGE_SIZE);
+			if (ret != KERN_SUCCESS) {
+				vm_map_deallocate(temp_map);
+				return(LOAD_FAILURE);
+			}
+
+			/*
+			 * Adjust copysize for correct copy below.
+			 */
+			copysize = trunc_addr;
+		}
+
+		/*
+		 *	Copy the data into map.
+		 */
+		ret = vm_map_copy(map, temp_map, dest_addr, copysize, src_addr,
+				FALSE, FALSE);
+		vm_map_deallocate(temp_map);
+		if (ret != KERN_SUCCESS)
+			return(LOAD_FAILURE);
+	}
+
+	/*
+	 *	Set protection values. (Note: ignore errors!)
+	 */
+
+	if (scp64->maxprot != VM_PROT_DEFAULT) {
+		(void) vm_map_protect(map,
+				      dest_addr,
+				      dest_addr + vmsize,
+				      scp64->maxprot,
+				      TRUE);
+	}
+	if (scp64->initprot != VM_PROT_DEFAULT) {
+		(void) vm_map_protect(map,
+				      dest_addr,
+				      dest_addr + vmsize,
+				      scp64->initprot,
+				      FALSE);
+	}
+	if ( (scp64->fileoff == 0) && (scp64->filesize != 0) )
 		result->mach_header = dest_addr;
 	return(LOAD_SUCCESS);
 }
@@ -963,7 +1155,8 @@ get_macho_vnode(
 
 /* XXXX WMG - we should check for a short read of the header here */
 	
-	if (header.mach_header.magic == MH_MAGIC)
+	if (header.mach_header.magic == MH_MAGIC ||
+	    header.mach_header.magic == MH_MAGIC_64)
 	    is_fat = FALSE;
 	else if (header.fat_header.magic == FAT_MAGIC ||
 		 header.fat_header.magic == FAT_CIGAM)
@@ -995,7 +1188,8 @@ get_macho_vnode(
 		/*
 		 *	Is this really a Mach-O?
 		 */
-		if (header.mach_header.magic != MH_MAGIC) {
+		if (header.mach_header.magic != MH_MAGIC &&
+		    header.mach_header.magic != MH_MAGIC_64) {
 			error = LOAD_BADMACHO;
 			goto bad2;
 		}

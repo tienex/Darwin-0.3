@@ -49,7 +49,9 @@ struct load_command *load_commands)
     enum byte_sex target_byte_sex;
     struct load_command *lc, l;
     struct segment_command *sg;
+    struct segment_command_64 *sg64;
     struct section *s;
+    struct section_64 *s64;
     struct symtab_command *st;
     struct dysymtab_command *dyst;
     struct symseg_command *ss;
@@ -95,6 +97,17 @@ struct load_command *load_commands)
 				     sg->nsects * sizeof(struct section)){
 		    error("in swap_object_headers(): malformed load command "
 			  "(inconsistant cmdsize in LC_SEGMENT command %lu for "
+			  "the number of sections)", i);
+		    return(FALSE);
+		}
+		break;
+
+	    case LC_SEGMENT_64:
+		sg64 = (struct segment_command_64 *)lc;
+		if(sg64->cmdsize != sizeof(struct segment_command_64) +
+				     sg64->nsects * sizeof(struct section_64)){
+		    error("in swap_object_headers(): malformed load command "
+			  "(inconsistant cmdsize in LC_SEGMENT_64 command %lu for "
 			  "the number of sections)", i);
 		    return(FALSE);
 		}
@@ -726,6 +739,14 @@ struct load_command *load_commands)
 		    ((char *)sg + sizeof(struct segment_command));
 		swap_section(s, sg->nsects, target_byte_sex);
 		swap_segment_command(sg, target_byte_sex);
+		break;
+
+	    case LC_SEGMENT_64:
+		sg64 = (struct segment_command_64 *)lc;
+		s64 = (struct section_64 *)
+		    ((char *)sg64 + sizeof(struct segment_command_64));
+		swap_section_64(s64, sg64->nsects, target_byte_sex);
+		swap_segment_command_64(sg64, target_byte_sex);
 		break;
 
 	    case LC_SYMTAB:

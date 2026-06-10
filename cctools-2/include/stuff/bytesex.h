@@ -54,6 +54,15 @@ enum byte_sex {
 		      (((a) >> 8) & 0x0000ff00) | \
 	((unsigned long)(a) >> 24) )
 
+#define SWAP_LONG_LONG(a) ( ((a) << 56) | \
+			   (((a) << 40) & 0x00ff000000000000ULL) | \
+			   (((a) << 24) & 0x0000ff0000000000ULL) | \
+			   (((a) <<  8) & 0x000000ff00000000ULL) | \
+			   (((a) >>  8) & 0x00000000ff000000ULL) | \
+			   (((a) >> 24) & 0x0000000000ff0000ULL) | \
+			   (((a) >> 40) & 0x000000000000ff00ULL) | \
+			   ((unsigned long long)(a) >> 56) )
+
 __private_extern__ float SWAP_FLOAT(
     float f);
 
@@ -76,6 +85,10 @@ __private_extern__ void swap_mach_header(
     struct mach_header *mh,
     enum byte_sex target_byte_sex);
 
+__private_extern__ void swap_mach_header_64(
+    struct mach_header_64 *mh,
+    enum byte_sex target_byte_sex);
+
 __private_extern__ void swap_load_command(
     struct load_command *lc,
     enum byte_sex target_byte_sex);
@@ -84,8 +97,17 @@ __private_extern__ void swap_segment_command(
     struct segment_command *sg,
     enum byte_sex target_byte_sex);
 
+__private_extern__ void swap_segment_command_64(
+    struct segment_command_64 *sg,
+    enum byte_sex target_byte_sex);
+
 __private_extern__ void swap_section(
     struct section *s,
+    unsigned long nsects,
+    enum byte_sex target_byte_sex);
+
+__private_extern__ void swap_section_64(
+    struct section_64 *s,
     unsigned long nsects,
     enum byte_sex target_byte_sex);
 
@@ -211,6 +233,11 @@ __private_extern__ void swap_ident_command(
 
 __private_extern__ void swap_nlist(
     struct nlist *symbols,
+    unsigned long nsymbols,
+    enum byte_sex target_byte_sex);
+
+__private_extern__ void swap_nlist_64(
+    struct nlist_64 *symbols,
     unsigned long nsymbols,
     enum byte_sex target_byte_sex);
 

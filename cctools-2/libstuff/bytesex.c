@@ -148,6 +148,26 @@ enum byte_sex target_byte_sex)
 
 __private_extern__
 void
+swap_mach_header_64(
+struct mach_header_64 *mh,
+enum byte_sex target_byte_sex)
+{
+#ifdef __MWERKS__
+    enum byte_sex dummy;
+        dummy = target_byte_sex;
+#endif
+	mh->magic = SWAP_LONG(mh->magic);
+	mh->cputype = SWAP_LONG(mh->cputype);
+	mh->cpusubtype = SWAP_LONG(mh->cpusubtype);
+	mh->filetype = SWAP_LONG(mh->filetype);
+	mh->ncmds = SWAP_LONG(mh->ncmds);
+	mh->sizeofcmds = SWAP_LONG(mh->sizeofcmds);
+	mh->flags = SWAP_LONG(mh->flags);
+	mh->reserved = SWAP_LONG(mh->reserved);
+}
+
+__private_extern__
+void
 swap_load_command(
 struct load_command *lc,
 enum byte_sex target_byte_sex)
@@ -185,6 +205,29 @@ enum byte_sex target_byte_sex)
 
 __private_extern__
 void
+swap_segment_command_64(
+struct segment_command_64 *sg,
+enum byte_sex target_byte_sex)
+{
+#ifdef __MWERKS__
+    enum byte_sex dummy;
+        dummy = target_byte_sex;
+#endif
+	/* segname[16] */
+	sg->cmd = SWAP_LONG(sg->cmd);
+	sg->cmdsize = SWAP_LONG(sg->cmdsize);
+	sg->vmaddr = SWAP_LONG_LONG(sg->vmaddr);
+	sg->vmsize = SWAP_LONG_LONG(sg->vmsize);
+	sg->fileoff = SWAP_LONG_LONG(sg->fileoff);
+	sg->filesize = SWAP_LONG_LONG(sg->filesize);
+	sg->maxprot = SWAP_LONG(sg->maxprot);
+	sg->initprot = SWAP_LONG(sg->initprot);
+	sg->nsects = SWAP_LONG(sg->nsects);
+	sg->flags = SWAP_LONG(sg->flags);
+}
+
+__private_extern__
+void
 swap_section(
 struct section *s,
 unsigned long nsects,
@@ -208,6 +251,35 @@ enum byte_sex target_byte_sex)
 	    s[i].flags = SWAP_LONG(s[i].flags);
 	    s[i].reserved1 = SWAP_LONG(s[i].reserved1);
 	    s[i].reserved2 = SWAP_LONG(s[i].reserved2);
+	}
+}
+
+__private_extern__
+void
+swap_section_64(
+struct section_64 *s,
+unsigned long nsects,
+enum byte_sex target_byte_sex)
+{
+    unsigned long i;
+#ifdef __MWERKS__
+    enum byte_sex dummy;
+        dummy = target_byte_sex;
+#endif
+
+	for(i = 0; i < nsects; i++){
+	    /* sectname[16] */
+	    /* segname[16] */
+	    s[i].addr = SWAP_LONG_LONG(s[i].addr);
+	    s[i].size = SWAP_LONG_LONG(s[i].size);
+	    s[i].offset = SWAP_LONG(s[i].offset);
+	    s[i].align = SWAP_LONG(s[i].align);
+	    s[i].reloff = SWAP_LONG(s[i].reloff);
+	    s[i].nreloc = SWAP_LONG(s[i].nreloc);
+	    s[i].flags = SWAP_LONG(s[i].flags);
+	    s[i].reserved1 = SWAP_LONG(s[i].reserved1);
+	    s[i].reserved2 = SWAP_LONG(s[i].reserved2);
+	    s[i].reserved3 = SWAP_LONG(s[i].reserved3);
 	}
 }
 
@@ -1623,6 +1695,28 @@ enum byte_sex target_byte_sex)
 	    /* n_sect */
 	    symbols[i].n_desc = SWAP_SHORT(symbols[i].n_desc);
 	    symbols[i].n_value = SWAP_LONG(symbols[i].n_value);
+	}
+}
+
+__private_extern__
+void
+swap_nlist_64(
+struct nlist_64 *symbols,
+unsigned long nsymbols,
+enum byte_sex target_byte_sex)
+{
+    unsigned long i;
+#ifdef __MWERKS__
+    enum byte_sex dummy;
+        dummy = target_byte_sex;
+#endif
+
+	for(i = 0; i < nsymbols; i++){
+	    symbols[i].n_un.n_strx = SWAP_LONG(symbols[i].n_un.n_strx);
+	    /* n_type */
+	    /* n_sect */
+	    symbols[i].n_desc = SWAP_SHORT(symbols[i].n_desc);
+	    symbols[i].n_value = SWAP_LONG_LONG(symbols[i].n_value);
 	}
 }
 

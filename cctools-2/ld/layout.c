@@ -108,6 +108,7 @@ static struct hp_pa_integer_thread_state hppa_integer_state = { 0 };
 /* cputype == CPU_TYPE_SPARC, all subtypes */
 static struct sparc_thread_state_regs sparc_state = { {0} };
 
+static enum bool is_64bit_arch(void);
 static void layout_segments(void);
 static unsigned long next_vmaddr(
     unsigned long vmaddr,
@@ -350,6 +351,16 @@ layout_rld_symfile(void)
 #endif /* RLD_VM_ALLOC_DEBUG */
 }
 #endif /* defined(RLD) && !defined(SA_RLD) */
+
+/*
+ * is_64bit_arch() returns TRUE if the target architecture is 64-bit.
+ */
+static
+enum bool
+is_64bit_arch(void)
+{
+	return (arch_flag.cputype & CPU_ARCH_ABI64) != 0;
+}
 
 /*
  * layout_segments() basicly lays out the addresses and file offsets of
@@ -742,9 +753,16 @@ layout_segments(void)
 	p = &merged_segments;
 	while(*p){
 	    msg = *p;
-	    msg->sg.cmd = LC_SEGMENT;
-	    msg->sg.cmdsize = sizeof(struct segment_command) +
-			      msg->sg.nsects * sizeof(struct section);
+	    if(is_64bit_arch()){
+		msg->sg.cmd = LC_SEGMENT_64;
+		msg->sg.cmdsize = sizeof(struct segment_command_64) +
+				  msg->sg.nsects * sizeof(struct section_64);
+	    }
+	    else{
+		msg->sg.cmd = LC_SEGMENT;
+		msg->sg.cmdsize = sizeof(struct segment_command) +
+				  msg->sg.nsects * sizeof(struct section);
+	    }
 	    ncmds++;
 	    sizeofcmds += msg->sg.cmdsize;
 	    p = &(msg->next);
@@ -956,7 +974,10 @@ layout_segments(void)
 	/*
 	 * Fill in the mach_header for the output file.
 	 */
-	output_mach_header.magic = MH_MAGIC;
+	if(is_64bit_arch())
+	    output_mach_header.magic = MH_MAGIC_64;
+	else
+	    output_mach_header.magic = MH_MAGIC;
 	output_mach_header.cputype = arch_flag.cputype;
 	output_mach_header.cpusubtype = arch_flag.cpusubtype;
 	output_mach_header.filetype = filetype;
@@ -977,7 +998,10 @@ layout_segments(void)
 	 * MH_FVMLIB file type the headers are placed on their own page (the
 	 * size of the segment alignment).
 	 */
-	headers_size = sizeof(struct mach_header) + sizeofcmds;
+	if(is_64bit_arch())
+	    headers_size = sizeof(struct mach_header_64) + sizeofcmds;
+	else
+	    headers_size = sizeof(struct mach_header) + sizeofcmds;
 	if(filetype == MH_FVMLIB){
 	    if(headers_size > segalign)
 		fatal("size of headers (0x%x) exceeds the segment alignment "

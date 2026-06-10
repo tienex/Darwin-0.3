@@ -51,6 +51,7 @@ struct image {
     unsigned long seg1addr;	/* The address of the first segment */
     enum bool prebound;		/* Link states set from prebound state */
     struct mach_header *mh;	/* The mach header of the image. */
+    enum bool is_64bit;		/* The image is 64-bit (MH_MAGIC_64) */
     struct symtab_command *st;	/* The symbol table command for the image. */
     struct dysymtab_command	/* The dynamic symbol table command for the */
 	*dyst;			/*  image. */

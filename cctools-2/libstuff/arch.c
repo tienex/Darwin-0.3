@@ -66,6 +66,10 @@ static const struct arch_flag arch_flags[] = {
     { "m68030", CPU_TYPE_MC680x0, CPU_SUBTYPE_MC68030_ONLY },
     { "m68040", CPU_TYPE_MC680x0, CPU_SUBTYPE_MC68040 },
     { "hppa7100LC", CPU_TYPE_HPPA,  CPU_SUBTYPE_HPPA_7100LC },
+    { "mmix",   CPU_TYPE_MMIX,    CPU_SUBTYPE_MMIX_ALL },
+    { "ia64",   CPU_TYPE_IA64,    CPU_SUBTYPE_IA64_ALL },
+    { "itanium", CPU_TYPE_IA64,   CPU_SUBTYPE_IA64_ITANIUM },
+    { "itanium2", CPU_TYPE_IA64,  CPU_SUBTYPE_IA64_ITANIUM2 },
     { NULL,	0,		  0 }
 };
 
@@ -454,9 +458,11 @@ const struct arch_flag *flag)
       flag->cputype == CPU_TYPE_POWERPC ||
       flag->cputype == CPU_TYPE_HPPA ||
       flag->cputype == CPU_TYPE_SPARC ||
-      flag->cputype == CPU_TYPE_I860)
+      flag->cputype == CPU_TYPE_I860 ||
+      flag->cputype == CPU_TYPE_MMIX)
         return BIG_ENDIAN_BYTE_SEX;
-    else if(flag->cputype == CPU_TYPE_I386)
+    else if(flag->cputype == CPU_TYPE_I386 ||
+       flag->cputype == CPU_TYPE_IA64)
         return LITTLE_ENDIAN_BYTE_SEX;
     else
         return UNKNOWN_BYTE_SEX;
@@ -477,7 +483,9 @@ const struct arch_flag *flag)
       flag->cputype == CPU_TYPE_POWERPC ||
       flag->cputype == CPU_TYPE_I386 ||
       flag->cputype == CPU_TYPE_SPARC ||
-      flag->cputype == CPU_TYPE_I860)
+      flag->cputype == CPU_TYPE_I860 ||
+      flag->cputype == CPU_TYPE_MMIX ||
+      flag->cputype == CPU_TYPE_IA64)
         return(-1);
     else if(flag->cputype == CPU_TYPE_HPPA)
         return(+1);
@@ -512,6 +520,10 @@ const struct arch_flag *flag)
 	return(0);
     case CPU_TYPE_HPPA:
 	return(0xc0000000-0x04000000);
+    case CPU_TYPE_MMIX:
+	return(0x8000000000000000ULL);
+    case CPU_TYPE_IA64:
+	return(0x8000000000000000ULL);
     default:
 	return(0);
     }
@@ -547,6 +559,10 @@ const struct arch_flag *flag)
 {
 	if(flag->cputype == CPU_TYPE_POWERPC)
 	    return(0x1000); /* 4K */
+	else if(flag->cputype == CPU_TYPE_MMIX)
+	    return(0x2000); /* 8K */
+	else if(flag->cputype == CPU_TYPE_IA64)
+	    return(0x4000); /* 16K */
 	else
 	    return(0x2000); /* 8K */
 }

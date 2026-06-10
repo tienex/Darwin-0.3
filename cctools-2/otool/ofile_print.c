@@ -45,6 +45,7 @@
 #include <mach-o/ppc/reloc.h>
 #include <mach-o/hppa/reloc.h>
 #include <mach-o/sparc/reloc.h>
+#include <mach-o/mmix/reloc.h>
 #include "stuff/ofile.h"
 #include "stuff/allocate.h"
 #include "stuff/errors.h"
@@ -1156,7 +1157,9 @@ enum bool very_verbose)
     char *p, *begin, *end;
     struct load_command *lc, l;
     struct segment_command sg;
+    struct segment_command_64 sg64;
     struct section s;
+    struct section_64 s64;
     struct symtab_command st;
     struct dysymtab_command dyst;
     struct symseg_command ss;
@@ -1212,6 +1215,38 @@ enum bool very_verbose)
 		    print_section(&s, &sg, mh, object_size, verbose);
 
 		    if(p + sizeof(struct section) >
+		       (char *)load_commands + mh->sizeofcmds)
+			return;
+		    p += size;
+		}
+		break;
+
+	    case LC_SEGMENT_64:
+		memset((char *)&sg64, '\0', sizeof(struct segment_command_64));
+		size = left < sizeof(struct segment_command_64) ?
+		       left : sizeof(struct segment_command_64);
+		memcpy((char *)&sg64, (char *)lc, size);
+		if(swapped)
+		    swap_segment_command_64(&sg64, host_byte_sex);
+		print_segment_command_64(&sg64, object_size, verbose);
+
+		p = (char *)lc + sizeof(struct segment_command_64);
+		for(j = 0 ; j < sg64.nsects ; j++){
+		    if(p + sizeof(struct section_64) >
+		       (char *)load_commands + mh->sizeofcmds){
+			printf("section_64 structure command extends past end of "
+			       "load commands\n");
+		    }
+		    left = mh->sizeofcmds - (p - (char *)load_commands);
+		    memset((char *)&s64, '\0', sizeof(struct section_64));
+		    size = left < sizeof(struct section_64) ?
+			   left : sizeof(struct section_64);
+		    memcpy((char *)&s64, p, size);
+		    if(swapped)
+			swap_section_64(&s64, 1, host_byte_sex);
+		    print_section_64(&s64, &sg64, mh, object_size, verbose);
+
+		    if(p + sizeof(struct section_64) >
 		       (char *)load_commands + mh->sizeofcmds)
 			return;
 		    p += size;
@@ -1677,6 +1712,211 @@ enum bool verbose)
 	    printf(" (size of stubs)\n");
 	else
 	    printf("\n");
+}
+
+/*
+ * print an LC_SEGMENT_64 command.  The segment_command_64 structure specified
+ * must be aligned correctly and in the host byte sex.
+ */
+static
+void
+print_segment_command_64(
+struct segment_command_64 *sg64,
+unsigned long object_size,
+enum bool verbose)
+{
+	printf("      cmd LC_SEGMENT_64\n");
+	printf("  cmdsize %lu", sg64->cmdsize);
+	if(sg64->cmdsize != sizeof(struct segment_command_64) +
+			  sg64->nsects * sizeof(struct section_64))
+	    printf(" Inconsistant size\n");
+	else
+	    printf("\n");
+	printf("  segname %.16s\n", sg64->segname);
+	printf("   vmaddr 0x%016llx\n", (unsigned long long)sg64->vmaddr);
+	printf("   vmsize 0x%016llx\n", (unsigned long long)sg64->vmsize);
+	printf("  fileoff %llu", (unsigned long long)sg64->fileoff);
+	if(sg64->fileoff > object_size)
+	    printf(" (past end of file)\n");
+	else
+	    printf("\n");
+	printf(" filesize %llu", (unsigned long long)sg64->filesize);
+	if(sg64->fileoff + sg64->filesize > object_size)
+	    printf(" (past end of file)\n");
+	else
+	    printf("\n");
+	if(verbose){
+	    if((sg64->maxprot &
+	      ~(VM_PROT_READ  | VM_PROT_WRITE  | VM_PROT_EXECUTE)) != 0)
+		printf("  maxprot ?(0x%08x)\n", (unsigned int)sg64->maxprot);
+	    else{
+		if(sg64->maxprot & VM_PROT_READ)
+		    printf("  maxprot r");
+		else
+		    printf("  maxprot -");
+		if(sg64->maxprot & VM_PROT_WRITE)
+		    printf("w");
+		else
+		    printf("-");
+		if(sg64->maxprot & VM_PROT_EXECUTE)
+		    printf("x\n");
+		else
+		    printf("-\n");
+	    }
+	    if((sg64->initprot &
+	      ~(VM_PROT_READ  | VM_PROT_WRITE  | VM_PROT_EXECUTE)) != 0)
+		printf(" initprot ?(0x%08x)\n", (unsigned int)sg64->initprot);
+	    else{
+		if(sg64->initprot & VM_PROT_READ)
+		    printf(" initprot r");
+		else
+		    printf(" initprot -");
+		if(sg64->initprot & VM_PROT_WRITE)
+		    printf("w");
+		else
+		    printf("-");
+		if(sg64->initprot & VM_PROT_EXECUTE)
+		    printf("x\n");
+		else
+		    printf("-\n");
+	    }
+	}
+	else{
+	    printf("  maxprot 0x%08x\n", (unsigned int)sg64->maxprot);
+	    printf(" initprot 0x%08x\n", (unsigned int)sg64->initprot);
+	}
+	printf("   nsects %lu\n", sg64->nsects);
+	if(verbose){
+	    printf("    flags");
+	    if(sg64->flags == 0)
+		printf(" (none)\n");
+	    else{
+		if(sg64->flags & SG_HIGHVM){
+		    printf(" HIGHVM");
+		    sg64->flags &= ~SG_HIGHVM;
+		}
+		if(sg64->flags & SG_FVMLIB){
+		    printf(" FVMLIB");
+		    sg64->flags &= ~SG_FVMLIB;
+		}
+		if(sg64->flags & SG_NORELOC){
+		    printf(" NORELOC");
+		    sg64->flags &= ~SG_NORELOC;
+		}
+		if(sg64->flags)
+		    printf(" 0x%x (unknown flags)\n", (unsigned int)sg64->flags);
+		else
+		    printf("\n");
+	    }
+	}
+	else{
+	    printf("    flags 0x%x\n", (unsigned int)sg64->flags);
+	}
+}
+
+/*
+ * print a section_64 structure.  The section_64 structure specified must
+ * be aligned correctly and in the host byte sex.
+ */
+static
+void
+print_section_64(
+struct section_64 *s64,
+struct segment_command_64 *sg64,
+struct mach_header *mh,
+unsigned long object_size,
+enum bool verbose)
+{
+    unsigned long section_type, section_attributes;
+
+	printf("Section\n");
+	printf("  sectname %.16s\n", s64->sectname);
+	printf("   segname %.16s", s64->segname);
+	if(mh->filetype != MH_OBJECT &&
+	   strcmp(sg64->segname, s64->segname) != 0)
+	    printf(" (does not match segment)\n");
+	else
+	    printf("\n");
+	printf("      addr 0x%016llx\n", (unsigned long long)s64->addr);
+	printf("      size 0x%016llx", (unsigned long long)s64->size);
+	if((s64->flags & SECTION_TYPE) != S_ZEROFILL &&
+	   s64->offset + s64->size > object_size)
+	    printf(" (past end of file)\n");
+	else
+	    printf("\n");
+	printf("    offset %lu", s64->offset);
+	if(s64->offset > object_size)
+	    printf(" (past end of file)\n");
+	else
+	    printf("\n");
+	printf("     align 2^%lu (%lld)\n", s64->align, 1LL << s64->align);
+	printf("    reloff %lu", s64->reloff);
+	if(s64->reloff > object_size)
+	    printf(" (past end of file)\n");
+	else
+	    printf("\n");
+	printf("    nreloc %lu", s64->nreloc);
+	if(s64->reloff + s64->nreloc * sizeof(struct relocation_info) > object_size)
+	    printf(" (past end of file)\n");
+	else
+	    printf("\n");
+	section_type = s64->flags & SECTION_TYPE;
+	if(verbose){
+	    printf("      type");
+	    if(section_type == S_REGULAR)
+		printf(" S_REGULAR\n");
+	    else if(section_type == S_ZEROFILL)
+		printf(" S_ZEROFILL\n");
+	    else if(section_type == S_CSTRING_LITERALS)
+		printf(" S_CSTRING_LITERALS\n");
+	    else if(section_type == S_4BYTE_LITERALS)
+		printf(" S_4BYTE_LITERALS\n");
+	    else if(section_type == S_8BYTE_LITERALS)
+		printf(" S_8BYTE_LITERALS\n");
+	    else if(section_type == S_LITERAL_POINTERS)
+		printf(" S_LITERAL_POINTERS\n");
+	    else if(section_type == S_NON_LAZY_SYMBOL_POINTERS)
+		printf(" S_NON_LAZY_SYMBOL_POINTERS\n");
+	    else if(section_type == S_LAZY_SYMBOL_POINTERS)
+		printf(" S_LAZY_SYMBOL_POINTERS\n");
+	    else if(section_type == S_SYMBOL_STUBS)
+		printf(" S_SYMBOL_STUBS\n");
+	    else if(section_type == S_MOD_INIT_FUNC_POINTERS)
+		printf(" S_MOD_INIT_FUNC_POINTERS\n");
+	    else if(section_type == S_MOD_TERM_FUNC_POINTERS)
+		printf(" S_MOD_TERM_FUNC_POINTERS\n");
+	    else
+		printf(" 0x%08x\n", (unsigned int)section_type);
+
+	    printf("attributes");
+	    section_attributes = s64->flags & SECTION_ATTRIBUTES;
+	    if(section_attributes & S_ATTR_PURE_INSTRUCTIONS)
+		printf(" PURE_INSTRUCTIONS");
+	    if(section_attributes & S_ATTR_SOME_INSTRUCTIONS)
+		printf(" SOME_INSTRUCTIONS");
+	    if(section_attributes & S_ATTR_EXT_RELOC)
+		printf(" EXT_RELOC");
+	    if(section_attributes & S_ATTR_LOC_RELOC)
+		printf(" LOC_RELOC");
+	    if(section_attributes == 0)
+		printf(" (none)");
+	    printf("\n");
+	}
+	else
+	    printf("     flags 0x%08x\n", (unsigned int)s64->flags);
+	printf(" reserved1 %lu", s64->reserved1);
+	if(section_type == S_SYMBOL_STUBS ||
+	   section_type == S_LAZY_SYMBOL_POINTERS ||
+	   section_type == S_NON_LAZY_SYMBOL_POINTERS)
+	    printf(" (index into indirect symbol table)\n");
+	else
+	    printf("\n");
+	printf(" reserved2 %lu", s64->reserved2);
+	if(section_type == S_SYMBOL_STUBS)
+	    printf(" (size of stubs)\n");
+	else
+	    printf("\n");
+	printf(" reserved3 %lu\n", s64->reserved3);
 }
 
 /*
@@ -3422,6 +3662,36 @@ enum bool verbose)
 		    p += size;
 		}
 		break;
+
+	    case LC_SEGMENT_64:
+		memset((char *)&sg64, '\0', sizeof(struct segment_command_64));
+		size = left < sizeof(struct segment_command_64) ?
+		       left : sizeof(struct segment_command_64);
+		memcpy((char *)&sg64, (char *)lc, size);
+		if(swapped)
+		    swap_segment_command_64(&sg64, host_byte_sex);
+
+		p = (char *)lc + sizeof(struct segment_command_64);
+		for(j = 0 ; j < sg64.nsects ; j++){
+		    if(p + sizeof(struct section_64) >
+		       (char *)load_commands + mh->sizeofcmds){
+			printf("section_64 structure command extends past end of "
+			       "load commands\n");
+		    }
+		    left = mh->sizeofcmds - (p - (char *)load_commands);
+		    memset((char *)&s64, '\0', sizeof(struct section_64));
+		    size = left < sizeof(struct section_64) ?
+			   left : sizeof(struct section_64);
+		    memcpy((char *)&s64, p, size);
+		    if(swapped)
+			swap_section_64(&s64, 1, host_byte_sex);
+
+		    if(p + sizeof(struct section_64) >
+		       (char *)load_commands + mh->sizeofcmds)
+			return;
+		    p += size;
+		}
+		break;
 	    }
 	    if(l.cmdsize == 0){
 		printf("load command %lu size zero (can't advance to other "
@@ -3516,6 +3786,53 @@ enum bool verbose)
 		    k++;
 		}
 		break;
+
+	    case LC_SEGMENT_64:
+		memset((char *)&sg64, '\0', sizeof(struct segment_command_64));
+		size = left < sizeof(struct segment_command_64) ?
+		       left : sizeof(struct segment_command_64);
+		memcpy((char *)&sg64, (char *)lc, size);
+		if(swapped)
+		    swap_segment_command_64(&sg64, host_byte_sex);
+
+		nsects += sg64.nsects;
+		sections = reallocate(sections,
+				      nsects * sizeof(struct section));
+		memset((char *)(sections + (nsects - sg64.nsects)), '\0',
+		       sizeof(struct section) * sg64.nsects);
+		p = (char *)lc + sizeof(struct segment_command_64);
+		for(j = 0 ; j < sg64.nsects ; j++){
+		    left = mh->sizeofcmds - (p - (char *)load_commands);
+		    size = left < sizeof(struct section_64) ?
+			   left : sizeof(struct section_64);
+		    /* Convert section_64 to section for uniform processing */
+		    if(size == sizeof(struct section_64)){
+			struct section_64 s64_temp;
+			memcpy((char *)&s64_temp, p, sizeof(struct section_64));
+			if(swapped)
+			    swap_section_64(&s64_temp, 1, host_byte_sex);
+			/* Copy to 32-bit section structure (truncating addresses) */
+			memcpy(sections[k].sectname, s64_temp.sectname, 16);
+			memcpy(sections[k].segname, s64_temp.segname, 16);
+			sections[k].addr = (unsigned long)s64_temp.addr;
+			sections[k].size = (unsigned long)s64_temp.size;
+			sections[k].offset = s64_temp.offset;
+			sections[k].align = s64_temp.align;
+			sections[k].reloff = s64_temp.reloff;
+			sections[k].nreloc = s64_temp.nreloc;
+			sections[k].flags = s64_temp.flags;
+			sections[k].reserved1 = s64_temp.reserved1;
+			sections[k].reserved2 = s64_temp.reserved2;
+		    }
+
+		    if(p + sizeof(struct section_64) >
+		       (char *)load_commands + mh->sizeofcmds)
+			break;
+		    p += sizeof(struct section_64);
+		    k++;
+		}
+		break;
+
 	    case LC_DYSYMTAB:
 		memset((char *)&dyst, '\0', sizeof(struct dysymtab_command));
 		size = left < sizeof(struct dysymtab_command) ?
@@ -4207,6 +4524,52 @@ enum bool verbose)
 		    k++;
 		}
 		break;
+
+	    case LC_SEGMENT_64:
+		memset((char *)&sg64, '\0', sizeof(struct segment_command_64));
+		size = left < sizeof(struct segment_command_64) ?
+		       left : sizeof(struct segment_command_64);
+		memcpy((char *)&sg64, (char *)lc, size);
+		if(swapped)
+		    swap_segment_command_64(&sg64, host_byte_sex);
+
+		nsects += sg64.nsects;
+		sections = reallocate(sections,
+				      nsects * sizeof(struct section));
+		memset((char *)(sections + (nsects - sg64.nsects)), '\0',
+		       sizeof(struct section) * sg64.nsects);
+		p = (char *)lc + sizeof(struct segment_command_64);
+		for(j = 0 ; j < sg64.nsects ; j++){
+		    left = mh->sizeofcmds - (p - (char *)load_commands);
+		    size = left < sizeof(struct section_64) ?
+			   left : sizeof(struct section_64);
+		    /* Convert section_64 to section for uniform processing */
+		    if(size == sizeof(struct section_64)){
+			struct section_64 s64_temp;
+			memcpy((char *)&s64_temp, p, sizeof(struct section_64));
+			if(swapped)
+			    swap_section_64(&s64_temp, 1, host_byte_sex);
+			/* Copy to 32-bit section structure (truncating addresses) */
+			memcpy(sections[k].sectname, s64_temp.sectname, 16);
+			memcpy(sections[k].segname, s64_temp.segname, 16);
+			sections[k].addr = (unsigned long)s64_temp.addr;
+			sections[k].size = (unsigned long)s64_temp.size;
+			sections[k].offset = s64_temp.offset;
+			sections[k].align = s64_temp.align;
+			sections[k].reloff = s64_temp.reloff;
+			sections[k].nreloc = s64_temp.nreloc;
+			sections[k].flags = s64_temp.flags;
+			sections[k].reserved1 = s64_temp.reserved1;
+			sections[k].reserved2 = s64_temp.reserved2;
+		    }
+
+		    if(p + sizeof(struct section_64) >
+		       (char *)load_commands + mh->sizeofcmds)
+			break;
+		    p += sizeof(struct section_64);
+		    k++;
+		}
+		break;
 	    }
 	    if(l.cmdsize == 0){
 		printf("load command %lu size zero (can't advance to other "
@@ -4558,6 +4921,79 @@ enum bool print_addresses)
 		       (char *)load_commands + mh->sizeofcmds)
 			break;
 		    p += size;
+		}
+		break;
+
+	    case LC_SEGMENT_64:
+		memset((char *)&sg64, '\0', sizeof(struct segment_command_64));
+		size = left < sizeof(struct segment_command_64) ?
+		       left : sizeof(struct segment_command_64);
+		memcpy((char *)&sg64, (char *)lc, size);
+		if(swapped)
+		    swap_segment_command_64(&sg64, host_byte_sex);
+
+		p = (char *)lc + sizeof(struct segment_command_64);
+		for(j = 0 ; j < sg64.nsects ; j++){
+		    if(p + sizeof(struct section_64) >
+		       (char *)load_commands + mh->sizeofcmds){
+			printf("section_64 structure command extends past "
+			       "end of load commands\n");
+		    }
+		    left = mh->sizeofcmds - (p - (char *)load_commands);
+		    memset((char *)&s64, '\0', sizeof(struct section_64));
+		    size = left < sizeof(struct section_64) ?
+			   left : sizeof(struct section_64);
+		    memcpy((char *)&s64, p, size);
+		    if(swapped)
+			swap_section_64(&s64, 1, host_byte_sex);
+
+		    if((s64.flags & SECTION_TYPE) == S_CSTRING_LITERALS ||
+		       (s64.flags & SECTION_TYPE) == S_4BYTE_LITERALS ||
+		       (s64.flags & SECTION_TYPE) == S_8BYTE_LITERALS){
+			literal_sections = reallocate(literal_sections,
+						sizeof(struct literal_section) *
+						(nliteral_sections + 1));
+			/* Convert section_64 to section for literal_section */
+			memcpy(literal_sections[nliteral_sections].s.sectname,
+			       s64.sectname, 16);
+			memcpy(literal_sections[nliteral_sections].s.segname,
+			       s64.segname, 16);
+			literal_sections[nliteral_sections].s.addr =
+			    (unsigned long)s64.addr;
+			literal_sections[nliteral_sections].s.size =
+			    (unsigned long)s64.size;
+			literal_sections[nliteral_sections].s.offset = s64.offset;
+			literal_sections[nliteral_sections].s.align = s64.align;
+			literal_sections[nliteral_sections].s.reloff = s64.reloff;
+			literal_sections[nliteral_sections].s.nreloc = s64.nreloc;
+			literal_sections[nliteral_sections].s.flags = s64.flags;
+			literal_sections[nliteral_sections].s.reserved1 =
+			    s64.reserved1;
+			literal_sections[nliteral_sections].s.reserved2 =
+			    s64.reserved2;
+			literal_sections[nliteral_sections].contents =
+							object_addr + s64.offset;
+			if(s64.offset > object_size){
+			    printf("section contents of: (%.16s,%.16s) is past "
+				   "end of file\n", s64.segname, s64.sectname);
+			    literal_sections[nliteral_sections].size =  0;
+			}
+			else if(s64.offset + s64.size > object_size){
+			    printf("part of section contents of: (%.16s,%.16s) "
+				   "is past end of file\n",
+				   s64.segname, s64.sectname);
+			    literal_sections[nliteral_sections].size =
+				object_size - s64.offset;
+			}
+			else
+			    literal_sections[nliteral_sections].size = s64.size;
+			nliteral_sections++;
+		    }
+
+		    if(p + sizeof(struct section_64) >
+		       (char *)load_commands + mh->sizeofcmds)
+			break;
+		    p += sizeof(struct section_64);
 		}
 		break;
 	    }
@@ -4962,6 +5398,39 @@ const unsigned long strings_size)
 			else
 			    stride = sizeof(unsigned long);
 			index = s.reserved1 + (value - s.addr) / stride;
+			if(index < nindirect_symbols &&
+		    	   symbols != NULL && strings != NULL &&
+		           indirect_symbols[index] < nsymbols &&
+		           symbols[indirect_symbols[index]].n_un.n_strx <
+							   strings_size)
+			    return(strings +
+				symbols[indirect_symbols[index]].n_un.n_strx);
+			else
+			    return(NULL);
+		    }
+		}
+		break;
+
+	    case LC_SEGMENT_64:
+		memcpy((char *)&sg64, (char *)lc, sizeof(struct segment_command_64));
+		if(swapped)
+		    swap_segment_command_64(&sg64, host_byte_sex);
+		p = (char *)lc + sizeof(struct segment_command_64);
+		for(j = 0 ; j < sg64.nsects ; j++){
+		    memcpy((char *)&s64, p, sizeof(struct section_64));
+		    p += sizeof(struct section_64);
+		    if(swapped)
+			swap_section_64(&s64, 1, host_byte_sex);
+		    section_type = s64.flags & SECTION_TYPE;
+		    if((section_type == S_NON_LAZY_SYMBOL_POINTERS ||
+		        section_type == S_LAZY_SYMBOL_POINTERS ||
+		        section_type == S_SYMBOL_STUBS) &&
+		        value >= s64.addr && value < s64.addr + s64.size){
+			if(section_type == S_SYMBOL_STUBS)
+			    stride = s64.reserved2;
+			else
+			    stride = sizeof(unsigned long long);
+			index = s64.reserved1 + (value - s64.addr) / stride;
 			if(index < nindirect_symbols &&
 		    	   symbols != NULL && strings != NULL &&
 		           indirect_symbols[index] < nsymbols &&

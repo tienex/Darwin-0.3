@@ -126,6 +126,7 @@ __fdnlist(fd, list)
 	}
 	if (read(fd, (char *)&buf, sizeof(buf)) != sizeof(buf) ||
 	    (N_BADMAG(buf) && *((long *)&buf) != MH_MAGIC &&
+	     *((long *)&buf) != MH_MAGIC_64 &&
 	     NXSwapBigLongToHost(*((long *)&buf)) != FAT_MAGIC)) {
 		return (-1);
 	}
@@ -210,32 +211,48 @@ __fdnlist(fd, list)
 		}
 	}
 		
-	if (*((long *)&buf) == MH_MAGIC) {
+	if (*((long *)&buf) == MH_MAGIC || *((long *)&buf) == MH_MAGIC_64) {
 	    struct mach_header mh;
+	    struct mach_header_64 mh64;
 	    struct load_command *load_commands, *lcp;
 	    struct symtab_command *stp;
 	    long i;
+	    int is_64bit;
+	    unsigned long hdr_size, ncmds, sizeofcmds;
+
+		is_64bit = (*((long *)&buf) == MH_MAGIC_64);
+		hdr_size = is_64bit ? sizeof(struct mach_header_64) : sizeof(struct mach_header);
 
 		lseek(fd, arch_offset, SEEK_SET);
-		if (read(fd, (char *)&mh, sizeof(mh)) != sizeof(mh)) {
-			return (-1);
+		if (is_64bit) {
+			if (read(fd, (char *)&mh64, sizeof(mh64)) != sizeof(mh64)) {
+				return (-1);
+			}
+			ncmds = mh64.ncmds;
+			sizeofcmds = mh64.sizeofcmds;
+		} else {
+			if (read(fd, (char *)&mh, sizeof(mh)) != sizeof(mh)) {
+				return (-1);
+			}
+			ncmds = mh.ncmds;
+			sizeofcmds = mh.sizeofcmds;
 		}
-		load_commands = (struct load_command *)malloc(mh.sizeofcmds);
+		load_commands = (struct load_command *)malloc(sizeofcmds);
 		if (load_commands == NULL) {
 			return (-1);
 		}
-		if (read(fd, (char *)load_commands, mh.sizeofcmds) !=
-		    mh.sizeofcmds) {
+		if (read(fd, (char *)load_commands, sizeofcmds) !=
+		    sizeofcmds) {
 			free(load_commands);
 			return (-1);
 		}
 		stp = NULL;
 		lcp = load_commands;
-		for (i = 0; i < mh.ncmds; i++) {
+		for (i = 0; i < ncmds; i++) {
 			if (lcp->cmdsize % sizeof(long) != 0 ||
 			    lcp->cmdsize <= 0 ||
 			    (char *)lcp + lcp->cmdsize >
-			    (char *)load_commands + mh.sizeofcmds) {
+			    (char *)load_commands + sizeofcmds) {
 				free(load_commands);
 				return (-1);
 			}

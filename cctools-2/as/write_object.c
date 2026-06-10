@@ -22,6 +22,9 @@
 #ifdef SPARC
 #include <mach-o/sparc/reloc.h>
 #endif
+#ifdef MMIX
+#include <mach-o/mmix/reloc.h>
+#endif
 #include "stuff/round.h"
 #include "stuff/bytesex.h"
 #include "stuff/errors.h"
@@ -53,6 +56,10 @@
 #ifdef SPARC
 #define RELOC_SECTDIFF	SPARC_RELOC_SECTDIFF
 #define RELOC_PAIR	SPARC_RELOC_PAIR
+#endif
+#ifdef MMIX
+#define RELOC_SECTDIFF	MMIX_RELOC_SECTDIFF
+#define RELOC_PAIR	MMIX_RELOC_PAIR
 #endif
 #if defined(M68K) || defined(I386)
 #define RELOC_SECTDIFF	GENERIC_RELOC_SECTDIFF
@@ -103,6 +110,15 @@ static void
 #endif
 
 /*
+ * is_64bit_arch() returns TRUE if the current architecture is 64-bit.
+ */
+static int
+is_64bit_arch(void)
+{
+    return (md_cputype & CPU_ARCH_ABI64) != 0;
+}
+
+/*
  * write_object() writes a Mach-O object file from the built up data structures.
  */
 void
@@ -111,12 +127,15 @@ char *out_file_name)
 {
     /* The structures for Mach-O relocatables */
     struct mach_header		header;
+    struct mach_header_64	header_64;
     struct segment_command	reloc_segment;
+    struct segment_command_64	reloc_segment_64;
     struct symtab_command	symbol_table;
     struct dysymtab_command	dynamic_symbol_table;
     unsigned long		section_type, *indirect_symbols;
     isymbolS			*isymbolP;
     unsigned long		i, j, nsects, nsyms, strsize, nindirectsyms;
+    int			is_64bit;
 
     /* locals to fill in section struct fields */
     unsigned long offset, zero;
@@ -143,6 +162,9 @@ char *out_file_name)
 	I860_tweeks();
 #endif
 	i = 0; /* to shut up a compiler "may be used uninitialized" warning */
+
+	/* Determine if this is a 64-bit architecture */
+	is_64bit = is_64bit_arch();
 
 	/*
 	 * The first group of things to do is to set all the fields in the
@@ -178,48 +200,97 @@ char *out_file_name)
 	layout_symbols((long *)&nsyms, (long *)&strsize);
 
 	/* fill in the Mach-O header */
-	header.magic = MH_MAGIC;
-	header.cputype = md_cputype;
-	if(archflag_cpusubtype != -1)
-	    header.cpusubtype = archflag_cpusubtype;
-	else
-	    header.cpusubtype = md_cpusubtype;
+	if(is_64bit){
+	    header_64.magic = MH_MAGIC_64;
+	    header_64.cputype = md_cputype;
+	    if(archflag_cpusubtype != -1)
+		header_64.cpusubtype = archflag_cpusubtype;
+	    else
+		header_64.cpusubtype = md_cpusubtype;
 
-	header.filetype = MH_OBJECT;
-	header.ncmds = 0;
-	header.sizeofcmds = 0;
-	if(nsects != 0){
-	    header.ncmds += 1;
-	    header.sizeofcmds += sizeof(struct segment_command) +
-				 nsects * sizeof(struct section);
-	}
-	if(nsyms != 0){
-	    header.ncmds += 1;
-	    header.sizeofcmds += sizeof(struct symtab_command);
-	    if(flagseen['k']){
-		header.ncmds += 1;
-		header.sizeofcmds += sizeof(struct dysymtab_command);
+	    header_64.filetype = MH_OBJECT;
+	    header_64.ncmds = 0;
+	    header_64.sizeofcmds = 0;
+	    if(nsects != 0){
+		header_64.ncmds += 1;
+		header_64.sizeofcmds += sizeof(struct segment_command_64) +
+				     nsects * sizeof(struct section_64);
 	    }
+	    if(nsyms != 0){
+		header_64.ncmds += 1;
+		header_64.sizeofcmds += sizeof(struct symtab_command);
+		if(flagseen['k']){
+		    header_64.ncmds += 1;
+		    header_64.sizeofcmds += sizeof(struct dysymtab_command);
+		}
+	    }
+	    else
+		strsize = 0;
+	    header_64.flags = 0;
+	    header_64.reserved = 0;
 	}
-	else
-	    strsize = 0;
-	header.flags = 0;
+	else{
+	    header.magic = MH_MAGIC;
+	    header.cputype = md_cputype;
+	    if(archflag_cpusubtype != -1)
+		header.cpusubtype = archflag_cpusubtype;
+	    else
+		header.cpusubtype = md_cpusubtype;
+
+	    header.filetype = MH_OBJECT;
+	    header.ncmds = 0;
+	    header.sizeofcmds = 0;
+	    if(nsects != 0){
+		header.ncmds += 1;
+		header.sizeofcmds += sizeof(struct segment_command) +
+				     nsects * sizeof(struct section);
+	    }
+	    if(nsyms != 0){
+		header.ncmds += 1;
+		header.sizeofcmds += sizeof(struct symtab_command);
+		if(flagseen['k']){
+		    header.ncmds += 1;
+		    header.sizeofcmds += sizeof(struct dysymtab_command);
+		}
+	    }
+	    else
+		strsize = 0;
+	    header.flags = 0;
+	}
 
 	/* fill in the segment command */
-	memset(&reloc_segment, '\0', sizeof(struct segment_command));
-	reloc_segment.cmd = LC_SEGMENT;
-	reloc_segment.cmdsize = sizeof(struct segment_command) +
-				nsects * sizeof(struct section);
-	/* leave reloc_segment.segname full of zeros */
-	reloc_segment.vmaddr = 0;
-	reloc_segment.vmsize = 0;
-	reloc_segment.filesize = 0;
-	offset = header.sizeofcmds + sizeof(struct mach_header);
-	reloc_segment.fileoff = offset;
-	reloc_segment.maxprot = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
-	reloc_segment.initprot= VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
-	reloc_segment.nsects = nsects;
-	reloc_segment.flags = 0;
+	if(is_64bit){
+	    memset(&reloc_segment_64, '\0', sizeof(struct segment_command_64));
+	    reloc_segment_64.cmd = LC_SEGMENT_64;
+	    reloc_segment_64.cmdsize = sizeof(struct segment_command_64) +
+				    nsects * sizeof(struct section_64);
+	    /* leave reloc_segment_64.segname full of zeros */
+	    reloc_segment_64.vmaddr = 0;
+	    reloc_segment_64.vmsize = 0;
+	    reloc_segment_64.filesize = 0;
+	    offset = header_64.sizeofcmds + sizeof(struct mach_header_64);
+	    reloc_segment_64.fileoff = offset;
+	    reloc_segment_64.maxprot = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
+	    reloc_segment_64.initprot= VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
+	    reloc_segment_64.nsects = nsects;
+	    reloc_segment_64.flags = 0;
+	}
+	else{
+	    memset(&reloc_segment, '\0', sizeof(struct segment_command));
+	    reloc_segment.cmd = LC_SEGMENT;
+	    reloc_segment.cmdsize = sizeof(struct segment_command) +
+				    nsects * sizeof(struct section);
+	    /* leave reloc_segment.segname full of zeros */
+	    reloc_segment.vmaddr = 0;
+	    reloc_segment.vmsize = 0;
+	    reloc_segment.filesize = 0;
+	    offset = header.sizeofcmds + sizeof(struct mach_header);
+	    reloc_segment.fileoff = offset;
+	    reloc_segment.maxprot = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
+	    reloc_segment.initprot= VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
+	    reloc_segment.nsects = nsects;
+	    reloc_segment.flags = 0;
+	}
 	/*
 	 * Set the offsets to the contents of the sections (for non-zerofill
 	 * sections) and set the filesize and vmsize of the segment.  This is
@@ -239,17 +310,28 @@ char *out_file_name)
 		i = p->frch_section.addr - frchainP->frch_section.addr;
 	    else
 		i = frchainP->frch_section.size;
-	    reloc_segment.filesize += i;
+	    if(is_64bit)
+		reloc_segment_64.filesize += i;
+	    else
+		reloc_segment.filesize += i;
 	    frchainP->frch_section.offset = offset;
 	    offset += i;
-	    reloc_segment.vmsize = frchainP->frch_section.addr +
-				   frchainP->frch_section.size;
+	    if(is_64bit)
+		reloc_segment_64.vmsize = frchainP->frch_section.addr +
+				       frchainP->frch_section.size;
+	    else
+		reloc_segment.vmsize = frchainP->frch_section.addr +
+				       frchainP->frch_section.size;
 	}
 	for(frchainP = frchain_root; frchainP; frchainP = frchainP->frch_next){
 	    if((frchainP->frch_section.flags & SECTION_TYPE) != S_ZEROFILL)
 		continue;
-	    reloc_segment.vmsize = frchainP->frch_section.addr +
-				   frchainP->frch_section.size;
+	    if(is_64bit)
+		reloc_segment_64.vmsize = frchainP->frch_section.addr +
+				       frchainP->frch_section.size;
+	    else
+		reloc_segment.vmsize = frchainP->frch_section.addr +
+				       frchainP->frch_section.size;
 	}
 	offset = round(offset, sizeof(long));
 
@@ -321,7 +403,10 @@ char *out_file_name)
 	else
 	    symbol_table.symoff = offset;
 	symbol_table.nsyms = nsyms;
-	offset += symbol_table.nsyms * sizeof(struct nlist);
+	if(is_64bit)
+	    offset += symbol_table.nsyms * sizeof(struct nlist_64);
+	else
+	    offset += symbol_table.nsyms * sizeof(struct nlist);
 
 	/* fill in the string table fields of the symtab_command */
 	if(strsize == 0)
@@ -351,31 +436,75 @@ char *out_file_name)
 	offset = 0;
 
 	/* put the mach_header in the buffer */
-	memcpy(output_addr + offset, &header, sizeof(struct mach_header));
-	if(host_byte_sex != md_target_byte_sex)
-	    swap_mach_header((struct mach_header *)(output_addr + offset),
-			     md_target_byte_sex);
-	offset += sizeof(struct mach_header);
+	if(is_64bit){
+	    memcpy(output_addr + offset, &header_64, sizeof(struct mach_header_64));
+	    if(host_byte_sex != md_target_byte_sex)
+		swap_mach_header_64((struct mach_header_64 *)(output_addr + offset),
+				    md_target_byte_sex);
+	    offset += sizeof(struct mach_header_64);
+	}
+	else{
+	    memcpy(output_addr + offset, &header, sizeof(struct mach_header));
+	    if(host_byte_sex != md_target_byte_sex)
+		swap_mach_header((struct mach_header *)(output_addr + offset),
+				 md_target_byte_sex);
+	    offset += sizeof(struct mach_header);
+	}
 
 	/* put the segment_command in the buffer */
 	if(nsects != 0){
-	    memcpy(output_addr + offset, &reloc_segment,
-		   sizeof(struct segment_command));
-	    if(host_byte_sex != md_target_byte_sex)
-		swap_segment_command((struct segment_command *)
-				     (output_addr + offset),
-				     md_target_byte_sex);
-	    offset += sizeof(struct segment_command);
+	    if(is_64bit){
+		memcpy(output_addr + offset, &reloc_segment_64,
+		       sizeof(struct segment_command_64));
+		if(host_byte_sex != md_target_byte_sex)
+		    swap_segment_command_64((struct segment_command_64 *)
+					     (output_addr + offset),
+					     md_target_byte_sex);
+		offset += sizeof(struct segment_command_64);
+	    }
+	    else{
+		memcpy(output_addr + offset, &reloc_segment,
+		       sizeof(struct segment_command));
+		if(host_byte_sex != md_target_byte_sex)
+		    swap_segment_command((struct segment_command *)
+					 (output_addr + offset),
+					 md_target_byte_sex);
+		offset += sizeof(struct segment_command);
+	    }
 	}
 
 	/* put the segment_command's section structures in the buffer */
 	for(frchainP = frchain_root; frchainP; frchainP = frchainP->frch_next){
-	    memcpy(output_addr + offset, &(frchainP->frch_section),
-		   sizeof(struct section));
-	    if(host_byte_sex != md_target_byte_sex)
-		swap_section((struct section *)(output_addr + offset), 1,
-				     md_target_byte_sex);
-	    offset += sizeof(struct section);
+	    if(is_64bit){
+		struct section_64 sect_64;
+		memset(&sect_64, '\0', sizeof(struct section_64));
+		/* Copy section fields to section_64 structure */
+		memcpy(sect_64.sectname, frchainP->frch_section.sectname, 16);
+		memcpy(sect_64.segname, frchainP->frch_section.segname, 16);
+		sect_64.addr = frchainP->frch_section.addr;
+		sect_64.size = frchainP->frch_section.size;
+		sect_64.offset = frchainP->frch_section.offset;
+		sect_64.align = frchainP->frch_section.align;
+		sect_64.reloff = frchainP->frch_section.reloff;
+		sect_64.nreloc = frchainP->frch_section.nreloc;
+		sect_64.flags = frchainP->frch_section.flags;
+		sect_64.reserved1 = frchainP->frch_section.reserved1;
+		sect_64.reserved2 = frchainP->frch_section.reserved2;
+		sect_64.reserved3 = 0;
+		memcpy(output_addr + offset, &sect_64, sizeof(struct section_64));
+		if(host_byte_sex != md_target_byte_sex)
+		    swap_section_64((struct section_64 *)(output_addr + offset), 1,
+					 md_target_byte_sex);
+		offset += sizeof(struct section_64);
+	    }
+	    else{
+		memcpy(output_addr + offset, &(frchainP->frch_section),
+		       sizeof(struct section));
+		if(host_byte_sex != md_target_byte_sex)
+		    swap_section((struct section *)(output_addr + offset), 1,
+					 md_target_byte_sex);
+		offset += sizeof(struct section);
+	    }
 	}
 
 	/* put the symbol_command in the buffer */
@@ -425,35 +554,86 @@ char *out_file_name)
 
 	/* put the symbols in the output file's buffer */
 	offset = symbol_table.symoff;
-	for(symbolP = symbol_rootP; symbolP; symbolP = symbolP->sy_next){
-	    if((symbolP->sy_type & N_EXT) == 0){
-		symbol_name = symbolP->sy_nlist.n_un.n_name;
-		symbolP->sy_nlist.n_un.n_strx = symbolP->sy_name_offset;
-		memcpy(output_addr + offset, (char *)(&symbolP->sy_nlist),
+	if(is_64bit){
+	    struct nlist_64 nlist_64_temp;
+	    /* Local symbols */
+	    for(symbolP = symbol_rootP; symbolP; symbolP = symbolP->sy_next){
+		if((symbolP->sy_type & N_EXT) == 0){
+		    symbol_name = symbolP->sy_nlist.n_un.n_name;
+		    /* Convert nlist to nlist_64 */
+		    nlist_64_temp.n_un.n_strx = symbolP->sy_name_offset;
+		    nlist_64_temp.n_type = symbolP->sy_nlist.n_type;
+		    nlist_64_temp.n_sect = symbolP->sy_nlist.n_sect;
+		    nlist_64_temp.n_desc = symbolP->sy_nlist.n_desc;
+		    nlist_64_temp.n_value = symbolP->sy_nlist.n_value;
+		    memcpy(output_addr + offset, (char *)(&nlist_64_temp),
+			   sizeof(struct nlist_64));
+		    symbolP->sy_nlist.n_un.n_name = symbol_name;
+		    offset += sizeof(struct nlist_64);
+		}
+	    }
+	    /* External defined symbols */
+	    for(i = 0; i < nextdefsym; i++){
+		symbol_name = extdefsyms[i]->sy_nlist.n_un.n_name;
+		nlist_64_temp.n_un.n_strx = extdefsyms[i]->sy_name_offset;
+		nlist_64_temp.n_type = extdefsyms[i]->sy_nlist.n_type;
+		nlist_64_temp.n_sect = extdefsyms[i]->sy_nlist.n_sect;
+		nlist_64_temp.n_desc = extdefsyms[i]->sy_nlist.n_desc;
+		nlist_64_temp.n_value = extdefsyms[i]->sy_nlist.n_value;
+		memcpy(output_addr + offset, (char *)(&nlist_64_temp),
+		       sizeof(struct nlist_64));
+		extdefsyms[i]->sy_nlist.n_un.n_name = symbol_name;
+		offset += sizeof(struct nlist_64);
+	    }
+	    /* Undefined symbols */
+	    for(j = 0; j < nundefsym; j++){
+		symbol_name = undefsyms[j]->sy_nlist.n_un.n_name;
+		nlist_64_temp.n_un.n_strx = undefsyms[j]->sy_name_offset;
+		nlist_64_temp.n_type = undefsyms[j]->sy_nlist.n_type;
+		nlist_64_temp.n_sect = undefsyms[j]->sy_nlist.n_sect;
+		nlist_64_temp.n_desc = undefsyms[j]->sy_nlist.n_desc;
+		nlist_64_temp.n_value = undefsyms[j]->sy_nlist.n_value;
+		memcpy(output_addr + offset, (char *)(&nlist_64_temp),
+		       sizeof(struct nlist_64));
+		undefsyms[j]->sy_nlist.n_un.n_name = symbol_name;
+		offset += sizeof(struct nlist_64);
+	    }
+	    if(host_byte_sex != md_target_byte_sex)
+		swap_nlist_64((struct nlist_64 *)(output_addr + symbol_table.symoff),
+			   symbol_table.nsyms, md_target_byte_sex);
+	}
+	else{
+	    /* 32-bit symbol table */
+	    for(symbolP = symbol_rootP; symbolP; symbolP = symbolP->sy_next){
+		if((symbolP->sy_type & N_EXT) == 0){
+		    symbol_name = symbolP->sy_nlist.n_un.n_name;
+		    symbolP->sy_nlist.n_un.n_strx = symbolP->sy_name_offset;
+		    memcpy(output_addr + offset, (char *)(&symbolP->sy_nlist),
+			   sizeof(struct nlist));
+		    symbolP->sy_nlist.n_un.n_name = symbol_name;
+		    offset += sizeof(struct nlist);
+		}
+	    }
+	    for(i = 0; i < nextdefsym; i++){
+		symbol_name = extdefsyms[i]->sy_nlist.n_un.n_name;
+		extdefsyms[i]->sy_nlist.n_un.n_strx = extdefsyms[i]->sy_name_offset;
+		memcpy(output_addr + offset, (char *)(&extdefsyms[i]->sy_nlist),
 		       sizeof(struct nlist));
-		symbolP->sy_nlist.n_un.n_name = symbol_name;
+		extdefsyms[i]->sy_nlist.n_un.n_name = symbol_name;
 		offset += sizeof(struct nlist);
 	    }
+	    for(j = 0; j < nundefsym; j++){
+		symbol_name = undefsyms[j]->sy_nlist.n_un.n_name;
+		undefsyms[j]->sy_nlist.n_un.n_strx = undefsyms[j]->sy_name_offset;
+		memcpy(output_addr + offset, (char *)(&undefsyms[j]->sy_nlist),
+		       sizeof(struct nlist));
+		undefsyms[j]->sy_nlist.n_un.n_name = symbol_name;
+		offset += sizeof(struct nlist);
+	    }
+	    if(host_byte_sex != md_target_byte_sex)
+		swap_nlist((struct nlist *)(output_addr + symbol_table.symoff),
+			   symbol_table.nsyms, md_target_byte_sex);
 	}
-	for(i = 0; i < nextdefsym; i++){
-	    symbol_name = extdefsyms[i]->sy_nlist.n_un.n_name;
-	    extdefsyms[i]->sy_nlist.n_un.n_strx = extdefsyms[i]->sy_name_offset;
-	    memcpy(output_addr + offset, (char *)(&extdefsyms[i]->sy_nlist),
-	           sizeof(struct nlist));
-	    extdefsyms[i]->sy_nlist.n_un.n_name = symbol_name;
-	    offset += sizeof(struct nlist);
-	}
-	for(j = 0; j < nundefsym; j++){
-	    symbol_name = undefsyms[j]->sy_nlist.n_un.n_name;
-	    undefsyms[j]->sy_nlist.n_un.n_strx = undefsyms[j]->sy_name_offset;
-	    memcpy(output_addr + offset, (char *)(&undefsyms[j]->sy_nlist),
-	           sizeof(struct nlist));
-	    undefsyms[j]->sy_nlist.n_un.n_name = symbol_name;
-	    offset += sizeof(struct nlist);
-	}
-	if(host_byte_sex != md_target_byte_sex)
-	    swap_nlist((struct nlist *)(output_addr + symbol_table.symoff),
-		       symbol_table.nsyms, md_target_byte_sex);
 
 	/*
 	 * Put the relocation entries for each section in the buffer.

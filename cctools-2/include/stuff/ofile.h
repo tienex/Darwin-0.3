@@ -87,11 +87,12 @@ struct ofile {
     char *dylib_module_name;	    /* the name of the module */
 
     /* If this structure is currently referencing an object file these are
-       valid and filled in.  The mach_header and load commands have been 
+       valid and filled in.  The mach_header and load commands have been
        converted to the host byte sex if needed */
     char *object_addr;		    /* the address of the object file */
     unsigned long object_size;	    /* the size of the object file */
     enum byte_sex object_byte_sex;  /* the byte sex of the object file */
+    enum bool is_64bit;		    /* TRUE if object file is 64-bit */
     struct mach_header *mh;	    /* the mach_header of the object file */
     struct load_command		    /* the start of the load commands */
 	*load_commands;

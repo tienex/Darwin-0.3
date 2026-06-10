@@ -964,6 +964,16 @@ unsigned long r)
 #endif !defined(RLD)
 
 /*
+ * is_output_64bit() returns TRUE if we're generating 64-bit output.
+ */
+static
+enum bool
+is_output_64bit(void)
+{
+	return output_mach_header.magic == MH_MAGIC_64;
+}
+
+/*
  * output_headers() copys the headers of the object file into the buffer for
  * the output file.
  */
@@ -982,37 +992,124 @@ output_headers(void)
     struct dynamic_library *dp;
 #endif !defined(RLD)
     struct mach_header *mh;
+    struct mach_header_64 *mh64;
+    struct mach_header_64 mh64_buf;
+    struct segment_command_64 sg64;
+    struct section_64 s64;
     struct load_command *lc;
 
 	header_offset = 0;
 
 	/* first the mach header */
-	mh = (struct mach_header *)output_addr;
-	memcpy(mh, &output_mach_header, sizeof(struct mach_header));
-	header_offset += sizeof(struct mach_header);
+	if(is_output_64bit()){
+	    /* Write mach_header_64 */
+	    mh64 = (struct mach_header_64 *)output_addr;
+	    mh64->magic = output_mach_header.magic;
+	    mh64->cputype = output_mach_header.cputype;
+	    mh64->cpusubtype = output_mach_header.cpusubtype;
+	    mh64->filetype = output_mach_header.filetype;
+	    mh64->ncmds = output_mach_header.ncmds;
+	    mh64->sizeofcmds = output_mach_header.sizeofcmds;
+	    mh64->flags = output_mach_header.flags;
+	    mh64->reserved = 0;
+	    header_offset += sizeof(struct mach_header_64);
+	}
+	else{
+	    /* Write mach_header */
+	    mh = (struct mach_header *)output_addr;
+	    memcpy(mh, &output_mach_header, sizeof(struct mach_header));
+	    header_offset += sizeof(struct mach_header);
+	}
 	lc = (struct load_command *)(output_addr + header_offset);
 
 	/* next the segment load commands (and section structures) */
 	p = &merged_segments;
 	while(*p){
 	    msg = *p;
-	    memcpy(output_addr + header_offset, &(msg->sg),
-		   sizeof(struct segment_command));
-	    header_offset += sizeof(struct segment_command);
+	    if(is_output_64bit()){
+		/* Write segment_command_64 */
+		memset(&sg64, '\0', sizeof(struct segment_command_64));
+		sg64.cmd = msg->sg.cmd;
+		sg64.cmdsize = msg->sg.cmdsize;
+		memcpy(sg64.segname, msg->sg.segname, sizeof(sg64.segname));
+		sg64.vmaddr = msg->sg.vmaddr;
+		sg64.vmsize = msg->sg.vmsize;
+		sg64.fileoff = msg->sg.fileoff;
+		sg64.filesize = msg->sg.filesize;
+		sg64.maxprot = msg->sg.maxprot;
+		sg64.initprot = msg->sg.initprot;
+		sg64.nsects = msg->sg.nsects;
+		sg64.flags = msg->sg.flags;
+		memcpy(output_addr + header_offset, &sg64,
+		       sizeof(struct segment_command_64));
+		header_offset += sizeof(struct segment_command_64);
+	    }
+	    else{
+		/* Write segment_command */
+		memcpy(output_addr + header_offset, &(msg->sg),
+		       sizeof(struct segment_command));
+		header_offset += sizeof(struct segment_command);
+	    }
+
 	    content = &(msg->content_sections);
 	    while(*content){
 		ms = *content;
-		memcpy(output_addr + header_offset, &(ms->s),
-		       sizeof(struct section));
-		header_offset += sizeof(struct section);
+		if(is_output_64bit()){
+		    /* Write section_64 */
+		    memset(&s64, '\0', sizeof(struct section_64));
+		    memcpy(s64.sectname, ms->s.sectname, sizeof(s64.sectname));
+		    memcpy(s64.segname, ms->s.segname, sizeof(s64.segname));
+		    s64.addr = ms->s.addr;
+		    s64.size = ms->s.size;
+		    s64.offset = ms->s.offset;
+		    s64.align = ms->s.align;
+		    s64.reloff = ms->s.reloff;
+		    s64.nreloc = ms->s.nreloc;
+		    s64.flags = ms->s.flags;
+		    s64.reserved1 = ms->s.reserved1;
+		    s64.reserved2 = ms->s.reserved2;
+		    s64.reserved3 = 0;
+		    memcpy(output_addr + header_offset, &s64,
+			   sizeof(struct section_64));
+		    header_offset += sizeof(struct section_64);
+		}
+		else{
+		    /* Write section */
+		    memcpy(output_addr + header_offset, &(ms->s),
+			   sizeof(struct section));
+		    header_offset += sizeof(struct section);
+		}
 		content = &(ms->next);
 	    }
+
 	    zerofill = &(msg->zerofill_sections);
 	    while(*zerofill){
 		ms = *zerofill;
-		memcpy(output_addr + header_offset, &(ms->s),
-		       sizeof(struct section));
-		header_offset += sizeof(struct section);
+		if(is_output_64bit()){
+		    /* Write section_64 */
+		    memset(&s64, '\0', sizeof(struct section_64));
+		    memcpy(s64.sectname, ms->s.sectname, sizeof(s64.sectname));
+		    memcpy(s64.segname, ms->s.segname, sizeof(s64.segname));
+		    s64.addr = ms->s.addr;
+		    s64.size = ms->s.size;
+		    s64.offset = ms->s.offset;
+		    s64.align = ms->s.align;
+		    s64.reloff = ms->s.reloff;
+		    s64.nreloc = ms->s.nreloc;
+		    s64.flags = ms->s.flags;
+		    s64.reserved1 = ms->s.reserved1;
+		    s64.reserved2 = ms->s.reserved2;
+		    s64.reserved3 = 0;
+		    memcpy(output_addr + header_offset, &s64,
+			   sizeof(struct section_64));
+		    header_offset += sizeof(struct section_64);
+		}
+		else{
+		    /* Write section */
+		    memcpy(output_addr + header_offset, &(ms->s),
+			   sizeof(struct section));
+		    header_offset += sizeof(struct section);
+		}
 		zerofill = &(ms->next);
 	    }
 	    p = &(msg->next);

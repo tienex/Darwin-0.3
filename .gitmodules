@@ -1,0 +1,6 @@
+[submodule "emulator/gimmix"]
+	path = emulator/gimmix
+	url = https://github.com/Nils-TUD/GIMMIX.git
+[submodule "emulator/mmixware"]
+	path = emulator/mmixware
+	url = https://github.com/ascherer/mmix.git

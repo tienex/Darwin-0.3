@@ -1,0 +1,158 @@
+##
+# Copyright (c) 1999-2025 Apple Computer, Inc. All rights reserved.
+#
+# @APPLE_LICENSE_HEADER_START@
+#
+# Portions Copyright (c) 1999-2025 Apple Computer, Inc.  All Rights
+# Reserved.  This file contains Original Code and/or Modifications of
+# Original Code as defined in and that are subject to the Apple Public
+# Source License Version 1.1 (the "License").  You may not use this file
+# except in compliance with the License.  Please obtain a copy of the
+# License at http://www.apple.com/publicsource and read it before using
+# this file.
+#
+# The Original Code and all software distributed under the License are
+# distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+# EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+# INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE OR NON- INFRINGEMENT.  Please see the
+# License for the specific language governing rights and limitations
+# under the License.
+#
+# @APPLE_LICENSE_HEADER_END@
+##
+
+#
+# Mach Operating System
+# Copyright (c) 1986 Carnegie-Mellon University
+# All rights reserved.  The CMU software License Agreement
+# specifies the terms and conditions for use and redistribution.
+#
+######################################################################
+
+ifneq "" "$(wildcard /bin/mkdirs)"
+  MKDIRS = /bin/mkdirs
+else
+  MKDIRS = /bin/mkdir -p
+endif
+
+######################################################################
+#BEGIN	Machine dependent Makefile fragment for MMIX
+######################################################################
+
+#
+#  Compilation components
+#
+# NOTE: MMIX toolchain not yet available - these are placeholders
+# for when mmix-gcc, mmix-as, mmix-ld become available
+#
+CC=	mmix-gcc
+ LD=	mmix-ld
+AS=	mmix-as
+
+KCC=mmix-gcc -static -nostdinc -nostdlib -traditional-cpp -fno-builtin
+
+MACHINE_INCLUDES=
+
+MACHINE_GENASSYM_FLAGS= -DKERNEL
+
+# MMIX-specific compiler flags
+# -mmmix: Generate MMIX code
+# -m64: 64-bit architecture
+# -march=mmix: Target MMIX instruction set
+# -G0: No small data optimization (everything in .data/.bss)
+MACHINE_CFLAGS= -arch mmix -I$(SOURCE_DIR)/bsd/include \
+	-finline -fno-keep-inline-functions \
+	-fwritable-strings -fno-common \
+	-Dmmix -DMMIX -Wall -m64 -mmmix -G0 \
+	-mno-float -msoft-float
+
+# Assembly flags for MMIX
+MACHINE_SFLAGS= -arch mmix -D__ASSEMBLER__ -Dmmix -DMMIX
+
+# Linker flags
+# Entry point: _start (in start.s)
+# Text segment: 0x8000000000100000 (kernel virtual base)
+# Alignment: 8KB page size
+LDFLAGS=-e _start -segalign 0x2000 \
+		-segaddr __TEXT 0x8000000000100000 \
+		-segaddr __VECTORS 0x0  \
+		-noseglinkedit
+
+MACHINE=mmix
+
+LIBS_P=-lcc
+LIBS=-lcc
+
+PRELDDEPS=assym.h
+
+LDOBJS_PREFIX= $(LIBC_OBJ) $(LIBC_UNROLL_OBJ)
+LDOBJS_SUFFIX= $(LIBDRIVER_SOURCE)/$(LIBDRIVER) $(LIBOBJC_SOURCE)/$(LIBOBJC) $(LIBPEXPERT_SOURCE)/$(LIBPEXPERT)
+
+LDDEPS_PREFIX=
+SWAPDEPS_PREFIX=
+
+OBJSDEPS=
+
+FEATURES_EXTRA=
+
+# Standard C library functions (MMIX-specific implementations)
+LIBC_SRC=	memchr.c memcmp.c memcpy.c memmove.c memset.c
+LIBC_OBJ=	$(LIBC_SRC:.c=.o)
+
+$(LIBC_OBJ):
+	${KCC} $(COPTS) $(MACHINE_CFLAGS) -c -O2 $(MACHINEDIR)/libc/$*.c
+
+LIBC_UNROLL_SRC=	strchr.c strrchr.c strlen.c \
+			strcpy.c strncpy.c strcat.c strncat.c \
+			strcmp.c strncmp.c index.c
+LIBC_UNROLL_OBJ=	$(LIBC_UNROLL_SRC:.c=.o)
+
+$(LIBC_UNROLL_OBJ):
+	${KCC} $(COPTS) $(MACHINE_CFLAGS) -c -O2 -funroll-all-loops \
+							$(MACHINEDIR)/libc/$*.c
+
+MACHINE_INSTALL=
+
+#
+# Install machine headers.
+#
+MACHINE_COMPATHDRS=
+MACHINE_INSTALLHDRS= mmix_installhdrs
+
+MACHINE_EXPORT=    bsd/mmix bsd/dev/mmix kernserv/mmix mach/mmix
+MACHINE_LCLEXPORT= bsd/mmix bsd/dev/mmix mach/mmix \
+			kernserv/mmix machdep/mmix driverkit/mmix
+
+MACHINE_MIGDIRS=   mach/mmix
+
+mmix_installhdrs: features DSTROOT
+	echo features = $(FEATURES)
+	$(MKDIRS) ${DSTROOT}${LCLDIR}/machdep/mmix
+	install -c -m 444 ${FEATURES}				\
+		${DSTROOT}${LCLDIR}/machdep/mmix
+
+MACHINE_TAG_DIRS=							\
+	bsd/mmix bsd/dev/mmix driverkit/mmix machdep/mmix 	\
+	kernserv/mmix mach/mmix
+
+#
+# Local clean rule
+#
+MACHINE_CLEAN=mmix_clean
+
+mmix_clean:
+	rm -rf *.o assym.h
+
+cleanup: ALWAYS
+	for i in ${TAGDIRS}; \
+	do \
+		(cd $(SOURCE_DIR)/$$i; rm -f *.CKP *.OLD *~ *.old core); \
+	done
+
+rebuild: clean cleanup features tags all
+	@echo Don't forget to do a make install
+
+######################################################################
+#END	Machine dependent Makefile fragment for MMIX
+######################################################################

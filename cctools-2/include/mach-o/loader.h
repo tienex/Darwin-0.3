@@ -65,6 +65,25 @@ struct mach_header {
 #define MH_CIGAM	NXSwapInt(MH_MAGIC)
 
 /*
+ * The 64-bit mach header appears at the very beginning of object files for
+ * 64-bit architectures.
+ */
+struct mach_header_64 {
+	unsigned long	magic;		/* mach magic number identifier */
+	cpu_type_t	cputype;	/* cpu specifier */
+	cpu_subtype_t	cpusubtype;	/* machine specifier */
+	unsigned long	filetype;	/* type of file */
+	unsigned long	ncmds;		/* number of load commands */
+	unsigned long	sizeofcmds;	/* the size of all the load commands */
+	unsigned long	flags;		/* flags */
+	unsigned long	reserved;	/* reserved for future use */
+};
+
+/* Constant for the magic field of the mach_header_64 */
+#define MH_MAGIC_64	0xfeedfacf	/* the 64-bit mach magic number */
+#define MH_CIGAM_64	NXSwapInt(MH_MAGIC_64)
+
+/*
  * The layout of the file depends on the filetype.  For all but the MH_OBJECT
  * file type the segments are padded out and aligned on a segment alignment
  * boundary for efficient demand pageing.  The MH_EXECUTE, MH_FVMLIB, MH_DYLIB,
@@ -150,6 +169,7 @@ struct load_command {
 #define LC_ID_DYLINKER	0xf	/* dynamic linker identification */
 #define	LC_PREBOUND_DYLIB 0x10	/* modules prebound for a dynamicly */
 				/*  linked shared library */
+#define	LC_SEGMENT_64	0x19	/* 64-bit segment of this file to be mapped */
 
 /*
  * A variable length string in a load command is represented by an lc_str
@@ -202,6 +222,26 @@ struct segment_command {
 				   it maybe safely replaced without relocation*/
 
 /*
+ * The 64-bit segment load command indicates that a part of this file is to be
+ * mapped into a 64-bit task's address space.  If the 64-bit segment has
+ * sections then section_64 structures directly follow the segment command
+ * and their size is reflected in cmdsize.
+ */
+struct segment_command_64 {
+	unsigned long	cmd;		/* LC_SEGMENT_64 */
+	unsigned long	cmdsize;	/* includes sizeof section_64 structs */
+	char		segname[16];	/* segment name */
+	unsigned long long	vmaddr;		/* memory address of this segment */
+	unsigned long long	vmsize;		/* memory size of this segment */
+	unsigned long long	fileoff;	/* file offset of this segment */
+	unsigned long long	filesize;	/* amount to map from the file */
+	vm_prot_t	maxprot;	/* maximum VM protection */
+	vm_prot_t	initprot;	/* initial VM protection */
+	unsigned long	nsects;		/* number of sections in segment */
+	unsigned long	flags;		/* flags */
+};
+
+/*
  * A segment is made up of zero or more sections.  Non-MH_OBJECT files have
  * all of their segments with the proper sections in each, and padded to the
  * specified segment alignment when produced by the link editor.  The first
@@ -238,6 +278,24 @@ struct section {
 	unsigned long	flags;		/* flags (section type and attributes)*/
 	unsigned long	reserved1;	/* reserved */
 	unsigned long	reserved2;	/* reserved */
+};
+
+/*
+ * The 64-bit section structure.  Used for 64-bit architectures.
+ */
+struct section_64 {
+	char		sectname[16];	/* name of this section */
+	char		segname[16];	/* segment this section goes in */
+	unsigned long long	addr;		/* memory address of this section */
+	unsigned long long	size;		/* size in bytes of this section */
+	unsigned long	offset;		/* file offset of this section */
+	unsigned long	align;		/* section alignment (power of 2) */
+	unsigned long	reloff;		/* file offset of relocation entries */
+	unsigned long	nreloc;		/* number of relocation entries */
+	unsigned long	flags;		/* flags (section type and attributes)*/
+	unsigned long	reserved1;	/* reserved (for offset or index) */
+	unsigned long	reserved2;	/* reserved (for count or sizeof) */
+	unsigned long	reserved3;	/* reserved */
 };
 
 /*
@@ -669,9 +727,36 @@ struct dylib_module {
 	objc_module_info_addr;  /*  the (__OBJC,__module_info) section */
     unsigned long		/* for this module size of */
 	objc_module_info_size;	/*  the (__OBJC,__module_info) section */
-};	
+};
 
-/* 
+/* a 64-bit module table entry */
+struct dylib_module_64 {
+    unsigned long module_name;	/* the module name (index into string table) */
+
+    unsigned long iextdefsym;	/* index into externally defined symbols */
+    unsigned long nextdefsym;	/* number of externally defined symbols */
+    unsigned long irefsym;		/* index into reference symbol table */
+    unsigned long nrefsym;	/* number of reference symbol table entries */
+    unsigned long ilocalsym;	/* index into symbols for local symbols */
+    unsigned long nlocalsym;	/* number of local symbols */
+
+    unsigned long iextrel;	/* index into external relocation entries */
+    unsigned long nextrel;	/* number of external relocation entries */
+
+    unsigned long iinit_iterm;	/* low 16 bits are the index into the init
+				   section, high 16 bits are the index into
+				   the term section */
+    unsigned long ninit_nterm;	/* low 16 bits are the number of init section
+				   entries, high 16 bits are the number of
+				   term section entries */
+
+    unsigned long		/* for this module address of the start of */
+	objc_module_info_addr;  /*  the (__OBJC,__module_info) section */
+    unsigned long long		/* for this module size of */
+	objc_module_info_size;	/*  the (__OBJC,__module_info) section */
+};
+
+/*
  * The entries in the reference symbol table are used when loading the module
  * (both by the static and dynamic link editors) and if the module is unloaded
  * or replaced.  Therefore all external symbols (defined and undefined) are
