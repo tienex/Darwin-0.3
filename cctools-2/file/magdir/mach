@@ -47,6 +47,7 @@
 >4	lelong		17		rs6000
 >4	lelong		18		ppc
 >4	lelong		0x01000013	mmix
+>4	lelong		0x01000014	ia64
 >4	lelong		>18
 >>4	lelong		x		architecture=%ld
 #
@@ -83,6 +84,7 @@
 >4	lelong		17		rs6000
 >4	lelong		18		ppc
 >4	lelong		0x01000013	mmix
+>4	lelong		0x01000014	ia64
 >4	lelong		>18
 >>4	lelong		x		architecture=%ld
 #
@@ -118,6 +120,7 @@
 >4	belong		17		rs6000
 >4	belong		18		ppc
 >4	belong		0x01000013	mmix
+>4	belong		0x01000014	ia64
 >4	belong		>18
 >>4	belong		x		architecture=%ld
 #
@@ -154,5 +157,6 @@
 >4	belong		17		rs6000
 >4	belong		18		ppc
 >4	belong		0x01000013	mmix
+>4	belong		0x01000014	ia64
 >4	belong		>18
 >>4	belong		x		architecture=%ld

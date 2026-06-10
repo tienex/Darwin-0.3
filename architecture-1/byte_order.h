@@ -50,6 +50,8 @@ typedef unsigned long long NXSwappedDouble;
 #include "architecture/i386/byte_order.h"
 #elif defined (__mmix__)
 #include "architecture/mmix/byte_order.h"
+#elif defined (__ia64__)
+#include "architecture/ia64/byte_order.h"
 #else
 #error architecture not supported
 #endif

@@ -139,6 +139,7 @@ extern vm_offset_t		interrupt_stack[];
 /* skip				((cpu_type_t) 17)	*/
 #define CPU_TYPE_POWERPC		((cpu_type_t) 18)
 #define CPU_TYPE_MMIX			((cpu_type_t) (19 | CPU_ARCH_ABI64))
+#define CPU_TYPE_IA64			((cpu_type_t) (20 | CPU_ARCH_ABI64))
 
 
 /*
@@ -288,5 +289,12 @@ extern vm_offset_t		interrupt_stack[];
  *	MMIX subtypes
  */
 #define CPU_SUBTYPE_MMIX_ALL		((cpu_subtype_t) 0)
+
+/*
+ *	IA64 (Intel Itanium) subtypes
+ */
+#define CPU_SUBTYPE_IA64_ALL		((cpu_subtype_t) 0)
+#define CPU_SUBTYPE_IA64_ITANIUM	((cpu_subtype_t) 1)
+#define CPU_SUBTYPE_IA64_ITANIUM2	((cpu_subtype_t) 2)
 
 #endif	/* _MACH_MACHINE_H_ */

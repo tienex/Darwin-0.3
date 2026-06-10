@@ -26,14 +26,14 @@ SYSTEMDIR = /Local/Developer/System
 
 CFILES = arch.c getsecbyname.c getsegbyname.c get_end.c \
 	 swap.c hppa_swap.c i386_swap.c m68k_swap.c sparc_swap.c \
-	 ppc_swap.c i860_swap.c m88k_swap.c
+	 ppc_swap.c i860_swap.c m88k_swap.c mmix_swap.c ia64_swap.c
 
 INSTALL_FILES = $(CFILES) $(HFILES) shlib.ofileList dylib.ofileList Makefile \
 		notes
 
 OBJS = arch.o getsecbyname.o getsegbyname.o get_end.o swap.o \
        hppa_swap.o i386_swap.o m68k_swap.o sparc_swap.o ppc_swap.o \
-       i860_swap.o m88k_swap.o
+       i860_swap.o m88k_swap.o mmix_swap.o ia64_swap.o
 
 all: lib_ofiles
 
